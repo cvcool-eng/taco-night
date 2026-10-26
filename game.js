@@ -1961,7 +1961,8 @@ $('bizBody').addEventListener('click', ev => {
     const id = btn.dataset.id;
     r.order[id] = Math.max(0, Math.min(9, r.order[id] + (act === 'plus' ? 1 : -1)));
   } else if (act === 'send') {
-    bizMsg(sendRunner());
+    const res = sendRunner();
+    if (r.state === 'idle') bizMsg(res); // only speak up when he couldn't go
     if (r.state !== 'idle') setTimeout(closeBusiness, 700);
   } else if (act === 'auto') {
     r.auto = btn.checked;
