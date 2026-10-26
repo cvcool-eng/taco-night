@@ -707,7 +707,7 @@ function update(dt) {
       tr.spawnT -= dt;
       if (tr.spawnT <= 0 && queue(i).length < 2) {
         spawnCustomer(i);
-        tr.spawnT = Math.max(7, 13 - G.served * 0.3) * rr(0.85, 1.15);
+        tr.spawnT = Math.max(5.5, 10.5 - G.served * 0.25) * rr(0.85, 1.15); // a customer every ~10s, down to ~5.5s
       }
       queue(i).forEach((c, k) => { c.target = tr.off + SLOTS[k]; });
     });
