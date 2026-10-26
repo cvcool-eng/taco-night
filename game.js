@@ -408,10 +408,10 @@ function addPart(o) { parts.push(Object.assign({ life: 1, max: 1, vx: 0, vy: 0, 
 // ---------------------------------------------------------------------
 const SLOTS = [146, 118, 92, 66];
 const FEET = 162;
-const SHIRTS = ['#3a6ea5', '#2f8f5b', '#a5473a', '#7d5ba6', '#c79a2b', '#3a9aa5', '#d0d0d0', '#b0526e'];
-const PANTS = ['#2b3550', '#3b3b40', '#4a3a2a', '#25303a'];
-const SKIN = ['#f1c27d', '#e0a77a', '#c68642', '#8d5524', '#ffdbac'];
-const HAIR = ['#2a1a10', '#5a3a1a', '#111111', '#b08040', '#7a2a1a', '#d8d8d8'];
+const SHIRTS = ['#3a6ea5', '#2f8f5b', '#a5473a', '#7d5ba6', '#c79a2b', '#3a9aa5', '#d0d0d0', '#b0526e', '#e07a2a', '#5a6a2a', '#2a2a3a', '#c83a6a', '#6ab0e0', '#8a5a3a'];
+const PANTS = ['#2b3550', '#3b3b40', '#4a3a2a', '#25303a', '#5a4a3a', '#3a5a7a', '#6a6a70', '#1a1a20'];
+const SKIN = ['#f1c27d', '#e0a77a', '#c68642', '#8d5524', '#ffdbac', '#a86a3a', '#6a3a1a'];
+const HAIR = ['#2a1a10', '#5a3a1a', '#111111', '#b08040', '#7a2a1a', '#d8d8d8', '#e8c060', '#c8742a', '#4a2a4a'];
 
 // money and ingredient stock carry over between page reloads (saved in this browser)
 const SAVE_KEY = 'tacoNight.money', STOCK_KEY = 'tacoNight.stock';
@@ -455,7 +455,7 @@ function setPose(p, dur) { chef.pose = p; chef.poseT = dur; }
 // ---- business: extra trucks, cooks and a store runner ----
 const TRUCK_SPOTS = [0, 560, 800, 1040]; // world x offset of each truck (yours is first)
 const COOK_PRICE = 100, RUNNER_PRICE = 100, TRUCK_PRICE = 250;
-const COOK_TIME = 7;                    // seconds a hired cook takes per taco
+const COOK_TIME = 2.5;                  // seconds a hired cook takes per taco
 const WORK_TIME = 60, BREAK_TIME = 120; // workers work a minute, then take a 2-minute break
 const BIZ_KEY = 'tacoNight.business';
 const RUNNER_HOME = 278, STORE_DOOR = 462; // Leo hangs out by the right side of your truck
@@ -528,21 +528,22 @@ function saveBusiness() {
   } catch (err) { /* storage blocked */ }
 }
 
-// Random orders: any meat, any mix of toppings (sometimes none, sometimes
-// double meat), and never the same taco as one of the last few customers.
-const recentOrders = [];
+// Random orders from a shuffled deck of every possible taco (one or both
+// meats, any mix of toppings): you see every combination before any repeats,
+// and the bubble lists the ingredients in a random order too.
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = (rand() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const ALL_ORDERS = [];
+for (const meats of [['asada'], ['pollo'], ['asada', 'pollo']])
+  for (let mask = 0; mask < 8; mask++) ALL_ORDERS.push([...meats, ...TOPS.filter((_, k) => mask & (1 << k))]);
+let orderDeck = [], lastOrderKey = '';
 function newOrder() {
-  let order, key;
-  for (let tries = 0; tries < 30; tries++) {
-    const meats = rand() < 0.2 ? MEATS.slice() : [pick(MEATS)];
-    const tops = TOPS.filter(() => rand() < 0.5);
-    order = [...meats, ...tops];
-    key = order.slice().sort().join();
-    if (!recentOrders.includes(key)) break;
+  if (!orderDeck.length) {
+    orderDeck = shuffle(ALL_ORDERS.map(o => o.slice()));
+    if (orderDeck[0].slice().sort().join() === lastOrderKey) orderDeck.push(orderDeck.shift()); // no repeat across decks
   }
-  recentOrders.push(key);
-  if (recentOrders.length > 4) recentOrders.shift();
-  return order;
+  const order = orderDeck.shift();
+  lastOrderKey = order.slice().sort().join();
+  return shuffle(order);
 }
 function spawnCustomer(ti = 0) {
   const patience = Math.max(13, 26 - G.served * 0.6);
@@ -551,9 +552,13 @@ function spawnCustomer(ti = 0) {
     truck: ti, x: startX, target: startX, state: 'walk', dir: ti === 0 ? 1 : -1, walkT: 0,
     order: newOrder(), patience, maxPatience: patience,
     shirt: pick(SHIRTS), pants: pick(PANTS), skin: pick(SKIN), hair: pick(HAIR),
-    hat: rand() < 0.45 ? pick(['#2a4a8a', '#3a9a3a', '#e0e0e0', '#3a3a3a', '#d8a020']) : null,
+    hat: rand() < 0.35 ? pick(['#2a4a8a', '#3a9a3a', '#e0e0e0', '#3a3a3a', '#d8a020', '#c83a2a', '#7a3ab0']) : null,
+    backwards: rand() < 0.3, // cap worn backwards
+    hairdo: pick(['short', 'short', 'long', 'long', 'ponytail', 'bald']),
+    glasses: rand() < 0.25,
+    beard: rand() < 0.2,
     stache: rand() < 0.35,
-    tall: rand() < 0.5 ? 0 : 1, mood: 'ok', shake: 0, bob: rand() * 6,
+    tall: pick([-1, 0, 0, 1, 2]), mood: 'ok', shake: 0, bob: rand() * 6,
   });
 }
 function queue(ti = 0) { return G.customers.filter(c => c.truck === ti && c.state !== 'leave'); }
@@ -825,6 +830,7 @@ function updateCooks(dt) {
 
     // the first cook in an extra truck takes the window; everyone else walks around inside
     const atWindow = s.truck > 0 && staffAt(s.truck)[0] === s;
+    s.chef.walking = !atWindow && Math.abs(s.goal - s.x) > 0.5;
     if (atWindow) s.x = s.goal = 146;
     else if (Math.abs(s.goal - s.x) > 0.5) { s.dir = Math.sign(s.goal - s.x); s.x += s.dir * Math.min(Math.abs(s.goal - s.x), 22 * dt); }
     else if (!s.cooking && (s.waitT -= dt) <= 0) { s.goal = pick([112, 124, 160, 176, 182]); s.waitT = rr(1.5, 4); }
@@ -845,7 +851,7 @@ function updateCooks(dt) {
     s.noStock = false;
     if (s.onBreak) continue;
     // take the first waiting customer nobody is already cooking for
-    const c = queue(s.truck).find(c => c.state === 'wait' && !c.claimed && c.patience < c.maxPatience - 1.5);
+    const c = queue(s.truck).find(c => c.state === 'wait' && !c.claimed && c.patience < c.maxPatience - 0.5);
     if (!c) continue;
     if (c.order.every(id => G.stock[id] > 0)) {
       for (const id of c.order) G.stock[id]--;
@@ -1088,6 +1094,11 @@ function drawChef(c, t, st = chef, pal = CHEF_PAL, wk = null) {
   const y0 = 80 + (breathe ? 0 : 1) + lean, sx0 = x - 8, yb = y0 + 11;
 
   sprite(c, sx0, yb, CHEF_BODY, pal);
+  if (wk) { // legs (helpers stand further back, so you can see them above the counter)
+    const step = st.walking ? frame % 2 : 0;
+    R(c, sx0 + 4, yb + 11, 3, 5 - step, '#2b3550'); R(c, sx0 + 9, yb + 11, 3, 4 + step, '#2b3550');
+    R(c, sx0 + 4, yb + 15 - step, 3, 1, '#1a1010'); R(c, sx0 + 9, yb + 14 + step, 3, 1, '#1a1010');
+  }
   if (wk) drawWorkerHead(c, wk, sx0, y0, hatHop, look, eyes, mouth === 'none' ? 'smile' : mouth);
   else drawChefHead();
   function drawChefHead() {
@@ -1207,18 +1218,35 @@ function drawCustomer(g, c, t) {
   let legs = 'stand';
   if (walking) legs = f ? 'walk2' : 'walk1';
   else if (c.state === 'wait' && c.patience / c.maxPatience < 0.35 && Math.floor(t * 4) % 2) legs = 'tap'; // impatient foot tap
-  const rows = [...(side ? CUST_HEAD_SIDE : CUST_HEAD_BACK), ...CUST_BODY, ...CUST_LEGS[legs]];
+  // height: taller people get extra shirt rows, shorter ones lose one
+  const tall = c.tall || 0;
+  const body = tall >= 0 ? [...CUST_BODY.slice(0, 3), ...Array(tall).fill(CUST_BODY[3]), ...CUST_BODY.slice(3)] : CUST_BODY.slice(1);
+  const rows = [...(side ? CUST_HEAD_SIDE : CUST_HEAD_BACK), ...body, ...CUST_LEGS[legs]];
   const flip = side && c.dir < 0;
+  const bald = c.hairdo === 'bald' && !c.hat;
   const pal = {
-    T: c.hat || c.hair, U: c.hat, H: c.hair, S: c.skin, E: '#000000', N: shade(c.skin),
-    M: c.stache ? c.hair : c.skin, C: c.shirt, c: shade(c.shirt), P: c.pants, K: '#2a1608',
+    T: c.hat || (bald ? c.skin : c.hair), U: c.hat && !c.backwards ? c.hat : null, H: bald ? c.skin : c.hair,
+    S: c.skin, E: '#000000', N: shade(c.skin),
+    M: c.stache || c.beard ? c.hair : c.skin, C: c.shirt, c: shade(c.shirt), P: c.pants, K: '#2a1608',
   };
   // shadow
   g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(x - 7, fy, 14, 1); g.fillRect(x - 5, fy + 1, 10, 1);
   // Mario-style bounce on the passing frame
   const bob = walking && f ? -1 : 0;
-  sprite(g, x - 8, fy - 32 + bob, flip ? rows.map(r => [...r].reverse().join('')) : rows, pal);
-  if (side && c.mood === 'happy') R(g, flip ? x - 6 : x + 4, fy - 32 + bob + 9, 2, 1, '#5a0808');
+  const top = fy - rows.length + 1 + bob, sx = x - 8;
+  const fx = col => flip ? sx + 15 - col : sx + col; // mirror a column when facing left
+
+  // long hair and ponytails hang behind the head
+  if (!bald && (c.hairdo === 'long' || c.hairdo === 'ponytail')) {
+    if (!side) R(g, sx + 3, top + 3, 10, c.hairdo === 'long' ? 10 : 6, c.hair);
+    else if (c.hairdo === 'long') R(g, Math.min(fx(1), fx(4)), top + 2, 4, 9, c.hair);
+  }
+  sprite(g, sx, top, flip ? rows.map(r => [...r].reverse().join('')) : rows, pal);
+  if (!bald && c.hairdo === 'ponytail' && side) { R(g, Math.min(fx(0), fx(1)), top + 3, 2, 3, c.hair); P(g, fx(1), top + 6, c.hair); }
+  if (c.hat && c.backwards && side) R(g, Math.min(fx(0), fx(3)), top + 2, 4, 1, c.hat); // brim at the back
+  if (c.beard && side) R(g, Math.min(fx(4), fx(12)), top + 8, 9, 2, c.hair);
+  if (c.glasses && side) { R(g, Math.min(fx(9), fx(12)), top + 3, 4, 1, '#1a1a1a'); P(g, fx(10), top + 4, '#1a1a1a'); P(g, fx(12), top + 4, '#1a1a1a'); }
+  if (side && c.mood === 'happy') R(g, flip ? x - 6 : x + 4, top + 9, 2, 1, '#5a0808');
 }
 
 function drawBubble(c, t) {
@@ -1461,6 +1489,18 @@ function renderStreet(t) {
   e.save();
   e.globalCompositeOperation = 'destination-out';
   for (const c of G.customers) if (onScreen(c.x)) drawCustomer(e, c, t);
+  // ...and cooks block the grill flames, embers and hood light behind them
+  for (const tr of G.trucks) {
+    if (!onScreen(tr.off + 146)) continue;
+    const staff = staffAt(tr.i), atWindow = tr.i > 0 ? staff[0] : null;
+    for (const s of staff) {
+      if (s.onBreak) continue;
+      e.save();
+      e.translate(tr.off + (s === atWindow ? 0 : Math.round(s.x) - 146), s === atWindow ? 0 : -3);
+      drawChef(e, t, s.chef, null, s.w);
+      e.restore();
+    }
+  }
   if (rn.hired && rn.state !== 'shopping') drawCustomer(e, Object.assign({}, rn, { state: rn.state === 'toStore' || rn.state === 'back' ? 'walk' : 'idle' }), t);
   e.restore();
 
