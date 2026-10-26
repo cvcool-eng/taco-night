@@ -461,6 +461,7 @@ const WORK_TIME = 60;
 // every cook in a truck helps, so a bigger crew turns out each taco faster
 const cookTime = ti => Math.max(MIN_COOK_TIME, COOK_TIME / Math.max(1, staffAt(ti).length));
 const BIZ_KEY = 'tacoNight.business';
+const AUTO_TARGET = 30; // auto-restock fills every item above this
 const RUNNER_HOME = 278, STORE_DOOR = 462; // Leo hangs out by the right side of your truck
 
 // The people you can hire. Cooks work a truck window; the runner shops for you.
@@ -941,7 +942,11 @@ function updateRunner(dt) {
   if (!r.hired) return;
   const speed = 42;
   if (r.state === 'idle' && (r.lookT -= dt) <= 0) { r.dir = pick([-1, -1, 1]); r.lookT = rr(2, 5); } // chilling, glancing around
-  if (r.state === 'idle' && r.auto && runnerPacks() && ORDER.some(id => r.order[id] > 0 && G.stock[id] < 5)) sendRunner();
+  // auto-restock: the moment anything runs out, he goes and fills every item back above 30
+  if (r.cooldown > 0) r.cooldown -= dt;
+  if (r.state === 'idle' && r.auto && !(r.cooldown > 0) && ORDER.some(id => G.stock[id] <= 0)) {
+    r.state = 'toStore'; r.autoTrip = true; r.msg = 'Out of something! Restocking everything';
+  }
   if (r.state === 'toStore') {
     r.x += speed * dt; r.walkT += dt; r.dir = 1;
     if (r.x >= STORE_DOOR) { r.state = 'shopping'; r.t = 1.5; r.msg = 'Shopping...'; }
@@ -950,12 +955,27 @@ function updateRunner(dt) {
     if (r.t <= 0) {
       r.carrying = {};
       let bought = 0;
-      for (const id of ORDER) {
-        const packs = Math.min(r.order[id], Math.floor(G.money / PACK_PRICE));
-        if (packs <= 0) continue;
-        G.money -= packs * PACK_PRICE;
-        r.carrying[id] = packs * PACK_SIZE;
-        bought += packs;
+      if (r.autoTrip) {
+        // enough packs to get every item above AUTO_TARGET, bought one pack at a time
+        // round the list (empty items first) so a short wallet is shared out fairly
+        const need = Object.fromEntries(ORDER.map(id => [id, Math.max(0, Math.ceil((AUTO_TARGET + 1 - G.stock[id]) / PACK_SIZE))]));
+        const turn = ORDER.slice().sort((a, b) => G.stock[a] - G.stock[b]);
+        while (G.money >= PACK_PRICE && turn.some(id => need[id] > 0)) {
+          for (const id of turn) {
+            if (need[id] <= 0 || G.money < PACK_PRICE) continue;
+            G.money -= PACK_PRICE; need[id]--; bought++;
+            r.carrying[id] = (r.carrying[id] || 0) + PACK_SIZE;
+          }
+        }
+        if (!bought) r.cooldown = 15; // broke: wait a bit before trying again
+      } else {
+        for (const id of ORDER) {
+          const packs = Math.min(r.order[id], Math.floor(G.money / PACK_PRICE));
+          if (packs <= 0) continue;
+          G.money -= packs * PACK_PRICE;
+          r.carrying[id] = packs * PACK_SIZE;
+          bought += packs;
+        }
       }
       saveGame(); updateHud();
       r.paid = bought * PACK_PRICE;
@@ -973,10 +993,12 @@ function updateRunner(dt) {
       r.carrying = null;
       // show what the trip cost back at the truck (auto-restock trips are paid for too)
       if (r.paid) addPart({ type: 'text', str: '-$' + r.paid, x: r.x, y: FEET - 50, vy: -8, life: 1.8, max: 1.8, col: '#ff3a3a' });
+      r.msg = !r.paid ? 'Not enough money for supplies' : r.autoTrip ? 'Restocked everything!' : 'Delivered! Waiting for orders';
       r.paid = 0;
-      r.msg = r.auto ? 'Delivered! Auto-restock is on' : 'Delivered! Waiting for orders';
-      // a fresh list for next time (auto-restock keeps it, since that's what it reorders)
-      if (!r.auto) { for (const id of ORDER) r.order[id] = 0; saveBusiness(); renderLeoIfOpen(); }
+      // a fresh list for next time (an auto trip leaves your list alone)
+      if (!r.autoTrip) for (const id of ORDER) r.order[id] = 0;
+      r.autoTrip = false;
+      saveBusiness(); renderLeoIfOpen();
       saveGame(); refreshButtons();
       if (onScreen(r.x)) sfx.bell();
     }
@@ -2020,7 +2042,7 @@ function renderBusiness() {
         `<button data-act="plus" data-id="${id}">+</button></span></div>`;
     }
     const cost = runnerPacks() * PACK_PRICE;
-    h += `<div class="biz-row"><label><input type="checkbox" data-act="auto" ${r.auto ? 'checked' : ''}> AUTO-RESTOCK WHEN LOW</label>` +
+    h += `<div class="biz-row"><label><input type="checkbox" data-act="auto" ${r.auto ? 'checked' : ''}> AUTO-RESTOCK</label>` +
       `<button data-act="send" ${r.state !== 'idle' || r.onBreak || !cost ? 'disabled' : ''}>SEND LEO $${cost}</button></div>`;
     h += `<div class="biz-row"><span class="dim" id="runStatus">${runnerStatus()}</span></div></div>`;
   }
@@ -2083,7 +2105,7 @@ $('bizBody').addEventListener('click', ev => {
     if (r.state !== 'idle') setTimeout(closeBusiness, 700);
   } else if (act === 'auto') {
     r.auto = btn.checked;
-    bizMsg(r.auto ? 'Leo restocks by himself when anything gets low' : 'Auto-restock off');
+    bizMsg(r.auto ? 'When anything hits 0, Leo refills everything above 30' : 'Auto-restock off');
   } else return; // clicks on the truck picker etc.
   saveBusiness();
   renderBusiness();
