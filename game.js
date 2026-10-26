@@ -461,7 +461,7 @@ const WORK_TIME = 60;
 // every cook in a truck helps, so a bigger crew turns out each taco faster
 const cookTime = ti => Math.max(MIN_COOK_TIME, COOK_TIME / Math.max(1, staffAt(ti).length));
 const BIZ_KEY = 'tacoNight.business';
-const AUTO_TARGET = 30; // auto-restock fills every item above this
+const AUTO_TARGET = 50, AUTO_LOW = 20; // auto-restock leaves when anything drops below AUTO_LOW and fills everything above AUTO_TARGET
 const RUNNER_HOME = 278, STORE_DOOR = 462; // Leo hangs out by the right side of your truck
 
 // The people you can hire. Cooks work a truck window; the runner shops for you.
@@ -940,12 +940,12 @@ function sendRunner() {
 function updateRunner(dt) {
   const r = G.runner;
   if (!r.hired) return;
-  const speed = 42;
+  const speed = r.autoTrip ? 80 : 42; // he sprints on auto-restock runs so you never run dry
   if (r.state === 'idle' && (r.lookT -= dt) <= 0) { r.dir = pick([-1, -1, 1]); r.lookT = rr(2, 5); } // chilling, glancing around
-  // auto-restock: the moment anything runs out, he goes and fills every item back above 30
+  // auto-restock: before anything can run out, he goes and fills every item back up
   if (r.cooldown > 0) r.cooldown -= dt;
-  if (r.state === 'idle' && r.auto && !(r.cooldown > 0) && ORDER.some(id => G.stock[id] <= 0)) {
-    r.state = 'toStore'; r.autoTrip = true; r.msg = 'Out of something! Restocking everything';
+  if (r.state === 'idle' && r.auto && !(r.cooldown > 0) && ORDER.some(id => G.stock[id] < AUTO_LOW)) {
+    r.state = 'toStore'; r.autoTrip = true; r.msg = 'Running low! Restocking everything';
   }
   if (r.state === 'toStore') {
     r.x += speed * dt; r.walkT += dt; r.dir = 1;
@@ -2105,7 +2105,7 @@ $('bizBody').addEventListener('click', ev => {
     if (r.state !== 'idle') setTimeout(closeBusiness, 700);
   } else if (act === 'auto') {
     r.auto = btn.checked;
-    bizMsg(r.auto ? 'When anything hits 0, Leo refills everything above 30' : 'Auto-restock off');
+    bizMsg(r.auto ? 'Leo refills everything before it runs out' : 'Auto-restock off');
   } else return; // clicks on the truck picker etc.
   saveBusiness();
   renderBusiness();
