@@ -342,3 +342,6 @@ body { display: flex; align-items: center; justify-content: center; }
 .panel h3.sub { width: 100%; text-align: left; font-size: calc(var(--s) * 3px); color: #ff8fc6; margin-top: calc(var(--s) * 1.5px); }
 .panel p.dim { color: #8a7a6a; }
 #bizBody { width: 100%; display: flex; flex-direction: column; gap: calc(var(--s) * 1.5px); }
+/* panels still scroll, just without the white scrollbar */
+.panel { scrollbar-width: none; }
+.panel::-webkit-scrollbar { display: none; }
