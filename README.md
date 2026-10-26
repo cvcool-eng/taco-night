@@ -18,7 +18,7 @@ Scroll right with the mouse wheel (or drag, or use the arrows on the sides) to r
 
 Everything is clicked right in the world:
 
-- **Click any truck** to see your workers. Hire cooks ($100 each, 8 to choose from) and use the **ASSIGNED** picker to move them between trucks. Cooks in your truck work behind you and serve customers on their own.
+- **Click any truck** to see your workers. Hire cooks ($100 each, 58 to choose from, as many per truck as you like) and use the **ASSIGNED** picker to move them between trucks. Cooks in your truck work behind you and serve customers on their own.
 - **Leo the store runner ($100)** hangs out by your truck. Click him to choose what to buy and how many packs. He walks to the market, pays with your money and brings the stock back. Turn on auto-restock and he goes whenever something gets low.
 - **Click the FOR SALE lot** down the street to buy another truck ($250). It needs a cook before it can sell.
 

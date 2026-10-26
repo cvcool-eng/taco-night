@@ -456,7 +456,7 @@ function setPose(p, dur) { chef.pose = p; chef.poseT = dur; }
 const TRUCK_SPOTS = [0, 560, 800, 1040]; // world x offset of each truck (yours is first)
 const COOK_PRICE = 100, RUNNER_PRICE = 100, TRUCK_PRICE = 250;
 const COOK_TIME = 2.5;                  // seconds one cook takes per taco
-const MIN_COOK_TIME = 0.6;              // the fastest a full crew can get
+const MIN_COOK_TIME = 0.2;              // the fastest a huge crew can get
 const WORK_TIME = 60;
 // every cook in a truck helps, so a bigger crew turns out each taco faster
 const cookTime = ti => Math.max(MIN_COOK_TIME, COOK_TIME / Math.max(1, staffAt(ti).length));
@@ -473,6 +473,19 @@ const WORKERS = [
   { id: 'ana', name: 'ANA', job: 'cook', girl: true, hair: '#e8c060', skin: '#ffdbac', cap: '#3a9a3a', apron: '#3a9a3a' },
   { id: 'mateo', name: 'MATEO', job: 'cook', girl: false, hair: '#2a1a10', skin: '#f1c27d', cap: '#5a5a6a', apron: '#5a5a6a' },
   { id: 'elena', name: 'ELENA', job: 'cook', girl: true, hair: '#5a1a1a', skin: '#8d5524', cap: '#d8a020', apron: '#d8a020' },
+  // 50 more cooks, their looks mixed from the palettes below
+  ...[['RAFA', 0], ['ISABEL', 1], ['JAVI', 0], ['CAMILA', 1], ['PABLO', 0], ['VALERIA', 1], ['TOMAS', 0], ['ROSA', 1], ['LUIS', 0], ['PAULA', 1],
+    ['MIGUEL', 0], ['CARMEN', 1], ['ANDRES', 0], ['LAURA', 1], ['JORGE', 0], ['ELISA', 1], ['RAUL', 0], ['SARA', 1], ['HUGO', 0], ['NORA', 1],
+    ['IVAN', 0], ['MARTA', 1], ['OSCAR', 0], ['IRENE', 1], ['FELIX', 0], ['ALMA', 1], ['RUBEN', 0], ['GLORIA', 1], ['VICTOR', 0], ['JULIA', 1],
+    ['SERGIO', 0], ['DIANA', 1], ['EMILIO', 0], ['LUNA', 1], ['MARCOS', 0], ['ELSA', 1], ['NICO', 0], ['RITA', 1], ['ADRIAN', 0], ['OLIVIA', 1],
+    ['BRUNO', 0], ['XIMENA', 1], ['GABRIEL', 0], ['PILAR', 1], ['ENZO', 0], ['RENATA', 1], ['SAUL', 0], ['TERESA', 1], ['DAVID', 0], ['INES', 1]]
+    .map(([name, girl], i) => {
+      const HAIRS = ['#111111', '#2a1a10', '#4a2a14', '#5a1a1a', '#c8742a', '#e8c060', '#7a7a80'];
+      const SKINS = ['#ffdbac', '#f1c27d', '#e0a77a', '#c68642', '#8d5524', '#5c3a1e'];
+      const CAPS = ['#e05a8a', '#8a4ac8', '#2a5aa8', '#2aa8a0', '#c83a2a', '#3a9a3a', '#5a5a6a', '#d8a020', '#e07a2a', '#3ac8e0'];
+      const cap = CAPS[(i * 3) % CAPS.length];
+      return { id: name.toLowerCase(), name, job: 'cook', girl: !!girl, hair: HAIRS[(i * 5) % HAIRS.length], skin: SKINS[(i * 7) % SKINS.length], cap, apron: cap };
+    }),
   { id: 'leo', name: 'LEO', job: 'runner', girl: false, hair: '#5a3a1a', skin: '#e0a77a', cap: '#ff8a20', apron: '#ff8a20' },
 ];
 const COOKS = WORKERS.filter(w => w.job === 'cook');
@@ -1292,7 +1305,8 @@ function drawTruckFront(tr, t) {
   const yours = tr === playerTruck();
   const staff = staffAt(tr.i);
   const atWindow = tr.i > 0 ? staff[0] : null; // in an extra truck the first cook takes the window
-  const behind = staff.filter(s => s !== atWindow && !s.onBreak);
+  // only a few fit in view at once; the rest of a big crew is busy out of sight
+  const behind = staff.filter(s => s !== atWindow && !s.onBreak).slice(0, 5);
   b.save(); b.translate(tr.off, 0);
   // helpers in the back are drawn first (a little higher, further away) so the window covers them
   for (const s of behind) {
@@ -1489,8 +1503,8 @@ function renderStreet(t) {
   for (const tr of G.trucks) {
     if (!onScreen(tr.off + 146)) continue;
     const staff = staffAt(tr.i), atWindow = tr.i > 0 ? staff[0] : null;
-    for (const s of staff) {
-      if (s.onBreak) continue;
+    const shown = [atWindow, ...staff.filter(s => s !== atWindow).slice(0, 5)].filter(Boolean);
+    for (const s of shown) {
       e.save();
       e.translate(tr.off + (s === atWindow ? 0 : Math.round(s.x) - 146), s === atWindow ? 0 : -3);
       drawChef(e, t, s.chef, null, s.w);
