@@ -958,6 +958,7 @@ function updateRunner(dt) {
         bought += packs;
       }
       saveGame(); updateHud();
+      r.paid = bought * PACK_PRICE;
       r.msg = bought ? `Bought ${bought} pack${bought > 1 ? 's' : ''}, coming back` : 'Not enough money! Coming back';
       r.state = 'back';
     }
@@ -970,7 +971,10 @@ function updateRunner(dt) {
         addPart({ type: 'icon', id, x: r.x + rr(-6, 6), y: FEET - 40, vy: -12, life: 1.4, max: 1.4 });
       }
       r.carrying = null;
-      r.msg = 'Delivered! Waiting for orders';
+      // show what the trip cost back at the truck (auto-restock trips are paid for too)
+      if (r.paid) addPart({ type: 'text', str: '-$' + r.paid, x: r.x, y: FEET - 50, vy: -8, life: 1.8, max: 1.8, col: '#ff3a3a' });
+      r.paid = 0;
+      r.msg = r.auto ? 'Delivered! Auto-restock is on' : 'Delivered! Waiting for orders';
       // a fresh list for next time (auto-restock keeps it, since that's what it reorders)
       if (!r.auto) { for (const id of ORDER) r.order[id] = 0; saveBusiness(); renderLeoIfOpen(); }
       saveGame(); refreshButtons();

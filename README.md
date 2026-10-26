@@ -19,7 +19,7 @@ Scroll right with the mouse wheel (or drag, or use the arrows on the sides) to r
 Everything is clicked right in the world:
 
 - **Click any truck** to see your workers. Hire cooks ($100 each, 58 to choose from, as many per truck as you like) and use the **ASSIGNED** picker to move them between trucks. Cooks in your truck work behind you and serve customers on their own.
-- **Leo the store runner ($100)** hangs out by your truck. Click him to choose what to buy and how many packs. He walks to the market, pays with your money and brings the stock back. Turn on auto-restock and he goes whenever something gets low.
+- **Leo the store runner ($100)** hangs out by your truck. Click him to choose what to buy and how many packs. He walks to the market, pays with your money and brings the stock back. Turn on auto-restock and he goes by himself whenever something on his list gets low. Every trip, auto or not, is paid for with your money (you see the cost pop up over him).
 - **Promoters ($100, 20 to choose from)** walk off down the street with a TACOS sign and bring people back. Every promoter you hire makes customers show up 30% more often at all your trucks, and longer lines can form.
 - **Click the FOR SALE lot** down the street to buy another truck ($250). It needs a cook before it can sell.
 
