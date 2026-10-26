@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Taco Night</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game" width="256" height="144"></canvas>
+
+    <div id="hud">
+      <div class="left">
+        <button id="pause" class="hudbtn" title="Pause (P)">II</button>
+        <div class="stats">
+          <div class="stat" id="money">$0</div>
+          <div class="stat" id="served">SERVED 0</div>
+        </div>
+      </div>
+      <button id="bizBtn" class="hudbtn">BUSINESS</button>
+    </div>
+
+    <button id="navL" class="nav navL" hidden></button>
+    <button id="navR" class="nav navR" hidden></button>
+    <div id="hint"></div>
+
+    <div id="bar">
+      <div class="ings">
+        <div class="row">
+          <span class="label">MEAT</span>
+          <button class="ing" data-ing="asada"><img alt=""><span class="nm">ASADA</span><span class="cnt"></span></button>
+          <button class="ing" data-ing="pollo"><img alt=""><span class="nm">POLLO</span><span class="cnt"></span></button>
+        </div>
+        <div class="row">
+          <span class="label">TOPS</span>
+          <button class="ing" data-ing="queso"><img alt=""><span class="nm">QUESO</span><span class="cnt"></span></button>
+          <button class="ing" data-ing="salsa"><img alt=""><span class="nm">SALSA</span><span class="cnt"></span></button>
+          <button class="ing" data-ing="lechuga"><img alt=""><span class="nm">LECHUGA</span><span class="cnt"></span></button>
+        </div>
+      </div>
+      <div class="acts">
+        <button class="act serve" id="serve"><span>SERVE</span></button>
+      </div>
+      <div class="marketbar">
+        <p>CLICK A SHELF TO BUY SUPPLIES<br><span>CUSTOMERS WAIT WHILE YOU SHOP</span></p>
+        <button class="act" id="leave"><span>BACK TO TRUCK</span></button>
+      </div>
+    </div>
+
+    <!-- buy a pack at a market shelf -->
+    <div id="shop" class="overlay hidden">
+      <div class="panel">
+        <img id="shopIcon" alt="">
+        <h2 id="shopName"></h2>
+        <p class="price">PACK OF 10 &middot; $2</p>
+        <p id="shopHave"></p>
+        <p id="shopMsg" class="msg"></p>
+        <div class="btnrow">
+          <button id="buy">BUY PACK</button>
+          <button id="shopClose" class="ghost">CLOSE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- hire cooks, a runner, and buy more trucks -->
+    <div id="biz" class="overlay hidden">
+      <div class="panel wide">
+        <h2>BUSINESS</h2>
+        <div id="bizBody"></div>
+        <p id="bizMsg" class="msg"></p>
+        <button id="bizClose" class="ghost">CLOSE</button>
+      </div>
+    </div>
+
+    <div id="screen" class="overlay hidden"></div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
