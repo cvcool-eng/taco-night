@@ -873,10 +873,7 @@ function updateRunner(dt) {
   const r = G.runner;
   if (!r.hired) return;
   const speed = 42;
-  tickShift(r, dt, r.state === 'idle');
   if (r.state === 'idle' && (r.lookT -= dt) <= 0) { r.dir = pick([-1, -1, 1]); r.lookT = rr(2, 5); } // chilling, glancing around
-  if (r.onBreak) { r.msg = 'On break'; refreshBusinessLive(); return; }
-  if (r.msg === 'On break') r.msg = '';
   if (r.state === 'idle' && r.auto && runnerPacks() && ORDER.some(id => r.order[id] > 0 && G.stock[id] < 5)) sendRunner();
   if (r.state === 'toStore') {
     r.x += speed * dt; r.walkT += dt; r.dir = 1;
@@ -907,6 +904,8 @@ function updateRunner(dt) {
       }
       r.carrying = null;
       r.msg = 'Delivered! Waiting for orders';
+      // a fresh list for next time (auto-restock keeps it, since that's what it reorders)
+      if (!r.auto) { for (const id of ORDER) r.order[id] = 0; saveBusiness(); renderLeoIfOpen(); }
       saveGame(); refreshButtons();
       if (onScreen(r.x)) sfx.bell();
     }
@@ -1883,7 +1882,7 @@ function renderBusiness() {
     for (const w of hired) {
       const s = w.job === 'runner' ? r : G.staff[w.id];
       const assigned = w.job === 'runner' ? '<span class="ok">STORE RUNS</span>' : truckPicker(w, s.truck);
-      h += card(w, `<span class="live" data-shift="${w.id}">${shiftText(s)}</span>`,
+      h += card(w, w.job === 'runner' ? 'ALWAYS READY TO RUN' : `<span class="live" data-shift="${w.id}">${shiftText(s)}</span>`,
         `<span class="assigned">ASSIGNED:</span>${assigned}`, 'hired');
     }
     if (free.length) {
@@ -1901,7 +1900,7 @@ function renderBusiness() {
   } else {
     $('bizTitle').textContent = 'LEO’S SHOPPING LIST';
     h += `<div class="card hired"><img class="face" src="${portraitURL(RUNNER)}" alt=""><div class="info"><div class="name">LEO</div>` +
-      `<div class="job">STORE RUNNER</div><div class="status"><span class="live" data-shift="leo">${shiftText(r)}</span></div></div></div>`;
+      `<div class="job">STORE RUNNER</div><div class="status">ALWAYS READY TO RUN</div></div></div>`;
     h += '<div class="orders">';
     for (const id of ORDER) {
       h += `<div class="biz-row"><span><img src="${iconURL(id)}" alt=""> ${ING_NAMES[id]} <span class="dim">(HAVE ${G.stock[id]})</span></span>` +
@@ -1915,6 +1914,7 @@ function renderBusiness() {
   }
   $('bizBody').innerHTML = h;
 }
+function renderLeoIfOpen() { if (!bizEl.classList.contains('hidden') && bizMode === 'leo') renderBusiness(); }
 function runnerStatus() {
   const r = G.runner;
   return 'LEO: ' + (r.msg || (r.state === 'idle' ? 'WAITING FOR ORDERS' : '')).toUpperCase();
@@ -1925,7 +1925,7 @@ function refreshBusinessLive() {
   if (el) el.textContent = runnerStatus();
   document.querySelectorAll('#bizBody [data-shift]').forEach(s => {
     const id = s.dataset.shift;
-    s.textContent = shiftText(id === RUNNER.id ? G.runner : G.staff[id]);
+    if (G.staff[id]) s.textContent = shiftText(G.staff[id]);
   });
 }
 function bizMsg(m) { $('bizMsg').textContent = m.toUpperCase(); }

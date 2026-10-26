@@ -22,7 +22,7 @@ Everything is clicked right in the world:
 - **Leo the store runner ($100)** hangs out by your truck. Click him to choose what to buy and how many packs. He walks to the market, pays with your money and brings the stock back. Turn on auto-restock and he goes whenever something gets low.
 - **Click the FOR SALE lot** down the street to buy another truck ($250). It needs a cook before it can sell.
 
-Workers work for 1 minute, then take a 2-minute break. While a truck's cook is on break, scroll over and serve its customers yourself, or they'll walk off and cost you $5.
+Cooks work for 1 minute, then take a 2-minute break (Leo never takes breaks). While a truck's cook is on break, scroll over and serve its customers yourself, or they'll walk off and cost you $5.
 
 Your money, stock, trucks and workers are saved in your browser. New players start with 20 of each ingredient.
 
