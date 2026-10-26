@@ -455,8 +455,11 @@ function setPose(p, dur) { chef.pose = p; chef.poseT = dur; }
 // ---- business: extra trucks, cooks and a store runner ----
 const TRUCK_SPOTS = [0, 560, 800, 1040]; // world x offset of each truck (yours is first)
 const COOK_PRICE = 100, RUNNER_PRICE = 100, TRUCK_PRICE = 250;
-const COOK_TIME = 2.5;                  // seconds a hired cook takes per taco
-const WORK_TIME = 60, BREAK_TIME = 120; // workers work a minute, then take a 2-minute break
+const COOK_TIME = 2.5;                  // seconds one cook takes per taco
+const MIN_COOK_TIME = 0.6;              // the fastest a full crew can get
+const WORK_TIME = 60;
+// every cook in a truck helps, so a bigger crew turns out each taco faster
+const cookTime = ti => Math.max(MIN_COOK_TIME, COOK_TIME / Math.max(1, staffAt(ti).length));
 const BIZ_KEY = 'tacoNight.business';
 const RUNNER_HOME = 278, STORE_DOOR = 462; // Leo hangs out by the right side of your truck
 
@@ -807,15 +810,8 @@ function animChef(st, dt, tr) {
     addPart({ type: 'note', x: tr.off + 152, y: 80, vx: rr(4, 10), vy: -10, life: 1.4, max: 1.4 });
 }
 
-// Workers' shifts: a minute of work, then a 2-minute break. A break only
-// starts once they've finished what they're doing (canStop).
-function tickShift(w, dt, canStop) {
-  w.shiftT -= dt;
-  if (w.shiftT > 0) return;
-  if (!w.onBreak && !canStop) { w.shiftT = 0; return; }
-  w.onBreak = !w.onBreak;
-  w.shiftT = w.onBreak ? BREAK_TIME : WORK_TIME;
-}
+// Workers never take breaks.
+function tickShift(w) { w.onBreak = false; w.shiftT = WORK_TIME; }
 
 // Hired cooks serve customers at their truck by themselves, as long as
 // there's stock for the whole order and they aren't on break. In your truck
@@ -825,7 +821,7 @@ function updateCooks(dt) {
     const s = G.staff[w.id];
     if (s.truck === null) continue;
     const tr = G.trucks[s.truck];
-    tickShift(s, dt, !s.cooking);
+    tickShift(s);
     animChef(s.chef, dt, tr);
 
     // the first cook in an extra truck takes the window; everyone else walks around inside
@@ -840,7 +836,7 @@ function updateCooks(dt) {
       s.cooking.t += dt;
       if (Math.floor(s.cooking.t * 3) !== Math.floor((s.cooking.t - dt) * 3))
         addPart({ type: 'ember', x: tr.off + rr(168, 186), y: 93, vx: rr(-5, 5), vy: rr(-30, -12), life: 0.7, max: 0.7 });
-      if (s.cooking.t >= COOK_TIME) {
+      if (s.cooking.t >= s.cooking.dur) {
         const c = s.cooking.c;
         s.cooking = null;
         c.claimed = null;
@@ -857,8 +853,8 @@ function updateCooks(dt) {
       for (const id of c.order) G.stock[id]--;
       saveGame(); refreshButtons();
       c.claimed = w.id;
-      s.cooking = { c, items: c.order.slice(), t: 0 };
-      setPoseOf(s.chef, 'cook', COOK_TIME);
+      s.cooking = { c, items: c.order.slice(), t: 0, dur: cookTime(s.truck) };
+      setPoseOf(s.chef, 'cook', s.cooking.dur);
     } else s.noStock = true;
   }
 }
@@ -1310,7 +1306,7 @@ function drawTruckFront(tr, t) {
   const cook = staff.find(s => s.cooking);
   let items = [];
   if (yours && (G.taco.length || !cook)) items = G.flying ? [] : G.taco;
-  else if (cook) items = cook.cooking.items.slice(0, Math.floor(cook.cooking.t / COOK_TIME * (cook.cooking.items.length + 1)));
+  else if (cook) items = cook.cooking.items.slice(0, Math.floor(cook.cooking.t / cook.cooking.dur * (cook.cooking.items.length + 1)));
   drawTaco(b, 146, 101, items);
   R(b, 106, 98, 6, 4, '#9aa0a8'); R(b, 107, 97, 4, 1, '#f4f4f4');
   R(b, 182, 97, 2, 5, '#d6281e'); P(b, 182, 96, '#2a8a2a');
@@ -1900,8 +1896,7 @@ function openBusiness(mode) {
 function closeBusiness() { G.menu = false; bizEl.classList.add('hidden'); }
 $('bizClose').addEventListener('click', closeBusiness);
 
-const clock = s => `${Math.floor(Math.ceil(s) / 60)}:${String(Math.ceil(s) % 60).padStart(2, '0')}`;
-function shiftText(w) { return w.onBreak ? `ON BREAK · BACK IN ${clock(w.shiftT)}` : `WORKING · BREAK IN ${clock(w.shiftT)}`; }
+function shiftText(w) { return w.truck === null ? '' : `NO BREAKS · ${cookTime(w.truck).toFixed(1)}S PER TACO`; }
 const truckName = i => i === 0 ? 'YOUR TRUCK' : `TRUCK ${i + 1}`;
 
 function renderBusiness() {
