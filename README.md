@@ -12,7 +12,7 @@ An 8-bit night-time taco truck game that runs in the browser. You're the bearded
 
 ### The market
 
-Scroll right with the mouse wheel (or drag, or use the arrows on the sides) to reach the corner market. Click it to go inside, then click a shelf to buy a pack of 10 of that ingredient for $2. Customers' timers stop while you're in the market.
+Scroll right with the mouse wheel (or drag, or use the arrows on the sides) to reach the corner market. Click it to go inside, then click a shelf to buy a pack of 10 of that ingredient for $4. Customers' timers stop while you're in the market.
 
 ### Growing the business
 

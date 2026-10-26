@@ -420,7 +420,7 @@ const HAIR = ['#2a1a10', '#5a3a1a', '#111111', '#b08040', '#7a2a1a', '#d8d8d8'];
 
 // money and ingredient stock carry over between page reloads (saved in this browser)
 const SAVE_KEY = 'tacoNight.money', STOCK_KEY = 'tacoNight.stock';
-const PACK_SIZE = 10, PACK_PRICE = 2, MISS_PENALTY = 5, STARTING_STOCK = 20;
+const PACK_SIZE = 10, PACK_PRICE = 4, MISS_PENALTY = 5, STARTING_STOCK = 20;
 function loadMoney() {
   try { return Math.max(0, parseInt(localStorage.getItem(SAVE_KEY), 10) || 0); } catch (err) { return 0; }
 }
