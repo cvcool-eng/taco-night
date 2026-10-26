@@ -282,23 +282,6 @@ function buildTruck() {
   drawIcon(c, 'asada', 78, 74); drawIcon(c, 'pollo', 78, 81); drawIcon(c, 'queso', 78, 88);
   for (const yy of [76, 83, 90]) R(c, 85, yy, 8, 1, '#a9bcae');
   R(c, 78, 95, 15, 1, '#e0c070');
-  // painted jalapeño, right of the window: curved green pepper with a stem
-  sprite(c, 200, 73, [
-    '....33..',
-    '...33...',
-    '.255554.',
-    '.2111114',
-    '.2111114',
-    '.2111114',
-    '..211114',
-    '..21114.',
-    '..21114.',
-    '...2114.',
-    '...2114.',
-    '....214.',
-    '....14..',
-    '.....4..',
-  ], { 1: '#4cbf34', 2: '#a4f082', 3: '#7a5420', 4: '#2a7a20', 5: '#3a9a2a' });
   // the serving window
   R(c, 98, 66, 96, 40, '#9aa0a8'); R(c, 98, 66, 96, 1, '#d0d4da');
   R(c, 100, 68, 92, 34, '#6a4430');
