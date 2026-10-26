@@ -20,6 +20,7 @@ Everything is clicked right in the world:
 
 - **Click any truck** to see your workers. Hire cooks ($100 each, 58 to choose from, as many per truck as you like) and use the **ASSIGNED** picker to move them between trucks. Cooks in your truck work behind you and serve customers on their own.
 - **Leo the store runner ($100)** hangs out by your truck. Click him to choose what to buy and how many packs. He walks to the market, pays with your money and brings the stock back. Turn on auto-restock and he goes whenever something gets low.
+- **Promoters ($100, 20 to choose from)** walk off down the street with a TACOS sign and bring people back. Every promoter you hire makes customers show up 30% more often at all your trucks, and longer lines can form.
 - **Click the FOR SALE lot** down the street to buy another truck ($250). It needs a cook before it can sell.
 
 Workers never take breaks. The more cooks you put in a truck, the faster each taco gets made: one cook takes 2.5 seconds, two take 1.25, and a full crew gets it down to about half a second.

@@ -464,6 +464,13 @@ const BIZ_KEY = 'tacoNight.business';
 const RUNNER_HOME = 278, STORE_DOOR = 462; // Leo hangs out by the right side of your truck
 
 // The people you can hire. Cooks work a truck window; the runner shops for you.
+function mixedWorker(name, girl, job, i) {
+  const HAIRS = ['#111111', '#2a1a10', '#4a2a14', '#5a1a1a', '#c8742a', '#e8c060', '#7a7a80'];
+  const SKINS = ['#ffdbac', '#f1c27d', '#e0a77a', '#c68642', '#8d5524', '#5c3a1e'];
+  const CAPS = ['#e05a8a', '#8a4ac8', '#2a5aa8', '#2aa8a0', '#c83a2a', '#3a9a3a', '#5a5a6a', '#d8a020', '#e07a2a', '#3ac8e0'];
+  const cap = CAPS[(i * 3) % CAPS.length];
+  return { id: name.toLowerCase(), name, job, girl: !!girl, hair: HAIRS[(i * 5) % HAIRS.length], skin: SKINS[(i * 7) % SKINS.length], cap, apron: cap };
+}
 const WORKERS = [
   { id: 'maria', name: 'MARIA', job: 'cook', girl: true, hair: '#2a1a10', skin: '#c68642', cap: '#e05a8a', apron: '#e05a8a' },
   { id: 'sofia', name: 'SOFIA', job: 'cook', girl: true, hair: '#c8742a', skin: '#f1c27d', cap: '#8a4ac8', apron: '#8a4ac8' },
@@ -479,17 +486,17 @@ const WORKERS = [
     ['IVAN', 0], ['MARTA', 1], ['OSCAR', 0], ['IRENE', 1], ['FELIX', 0], ['ALMA', 1], ['RUBEN', 0], ['GLORIA', 1], ['VICTOR', 0], ['JULIA', 1],
     ['SERGIO', 0], ['DIANA', 1], ['EMILIO', 0], ['LUNA', 1], ['MARCOS', 0], ['ELSA', 1], ['NICO', 0], ['RITA', 1], ['ADRIAN', 0], ['OLIVIA', 1],
     ['BRUNO', 0], ['XIMENA', 1], ['GABRIEL', 0], ['PILAR', 1], ['ENZO', 0], ['RENATA', 1], ['SAUL', 0], ['TERESA', 1], ['DAVID', 0], ['INES', 1]]
-    .map(([name, girl], i) => {
-      const HAIRS = ['#111111', '#2a1a10', '#4a2a14', '#5a1a1a', '#c8742a', '#e8c060', '#7a7a80'];
-      const SKINS = ['#ffdbac', '#f1c27d', '#e0a77a', '#c68642', '#8d5524', '#5c3a1e'];
-      const CAPS = ['#e05a8a', '#8a4ac8', '#2a5aa8', '#2aa8a0', '#c83a2a', '#3a9a3a', '#5a5a6a', '#d8a020', '#e07a2a', '#3ac8e0'];
-      const cap = CAPS[(i * 3) % CAPS.length];
-      return { id: name.toLowerCase(), name, job: 'cook', girl: !!girl, hair: HAIRS[(i * 5) % HAIRS.length], skin: SKINS[(i * 7) % SKINS.length], cap, apron: cap };
-    }),
+    .map(([name, girl], i) => mixedWorker(name, girl, 'cook', i)),
+  // 20 promoters who walk off with a sign and bring more customers back
+  ...[['CHUY', 0], ['LOLA', 1], ['PEPE', 0], ['NINA', 1], ['BETO', 0], ['PACA', 1], ['TITO', 0], ['YOLI', 1], ['MEMO', 0], ['KIKA', 1],
+    ['PACO', 0], ['LUPE', 1], ['CHEPE', 0], ['MAYA', 1], ['TONO', 0], ['BELA', 1], ['NACHO', 0], ['FRIDA', 1], ['LALO', 0], ['GABY', 1]]
+    .map(([name, girl], i) => mixedWorker(name, girl, 'promoter', i + 3)),
   { id: 'leo', name: 'LEO', job: 'runner', girl: false, hair: '#5a3a1a', skin: '#e0a77a', cap: '#ff8a20', apron: '#ff8a20' },
 ];
 const COOKS = WORKERS.filter(w => w.job === 'cook');
+const PROMOTERS = WORKERS.filter(w => w.job === 'promoter');
 const RUNNER = WORKERS.find(w => w.job === 'runner');
+const JOB_NAMES = { cook: 'TRUCK COOK', runner: 'STORE RUNNER', promoter: 'PROMOTER' };
 const workerById = id => WORKERS.find(w => w.id === id) || null;
 
 function makeChef() { return { pose: 'idle', poseT: 0, idle: 'stand', idleT: rr(1, 4), look: 0, lookT: 2, blinkT: rr(1, 4) }; }
@@ -516,6 +523,47 @@ G.runner = {
   shirt: RUNNER.cap, pants: '#2b3550', skin: RUNNER.skin, hair: RUNNER.hair, hat: RUNNER.cap, stache: false,
   patience: 1, maxPatience: 1, shake: 0, mood: 'ok', bob: 0,
 };
+// Promoters walk off into the dark with a TACOS sign and come back to wave it
+// by your truck. Every one you hire brings customers to all trucks faster.
+const PROMOTER_PRICE = 100;
+G.promo = Object.fromEntries(PROMOTERS.map(w => [w.id, {
+  w, hired: false, x: 330, dir: -1, walkT: 0, state: 'away', t: rr(0, 6), goal: 330,
+  shirt: w.cap, pants: '#2b3550', skin: w.skin, hair: w.hair, hat: w.cap, hairdo: w.girl ? 'long' : 'short',
+  stache: false, patience: 1, maxPatience: 1, shake: 0, mood: 'ok', bob: rr(0, 6),
+}]));
+const promoCount = () => PROMOTERS.filter(w => G.promo[w.id].hired).length;
+// each promoter adds 30% more customers, and longer lines are allowed with more of them
+const crowdBoost = () => 1 + promoCount() * 0.3;
+const maxLine = () => Math.min(SLOTS.length, 2 + Math.floor(promoCount() / 3));
+function updatePromoters(dt) {
+  for (const w of PROMOTERS) {
+    const p = G.promo[w.id];
+    if (!p.hired) continue;
+    if (p.state === 'out' || p.state === 'back') {
+      const dx = p.goal - p.x;
+      p.dir = Math.sign(dx) || p.dir; p.walkT += dt;
+      p.x += Math.sign(dx) * Math.min(Math.abs(dx), 26 * dt);
+      if (Math.abs(dx) < 0.5) { p.state = p.state === 'out' ? 'away' : 'wave'; p.t = p.state === 'away' ? rr(4, 9) : rr(3, 6); }
+    } else if ((p.t -= dt) <= 0) {
+      if (p.state === 'wave') { p.state = 'out'; p.goal = 330; }
+      else { p.state = 'back'; p.goal = rr(178, 252); }
+    }
+  }
+}
+// the promoters you can see right now (a few at a time so the street doesn't jam)
+const visiblePromoters = () => PROMOTERS.map(w => G.promo[w.id]).filter(p => p.hired && p.x < 310).slice(0, 4);
+function drawPromoter(ctx, p, t) {
+  const walking = p.state === 'out' || p.state === 'back';
+  drawCustomer(ctx, Object.assign({}, p, { state: walking ? 'walk' : 'idle' }), t);
+  // a TACOS sign on a stick, bobbing while they wave it
+  const lift = walking ? 0 : Math.floor(t * 3 + p.bob) % 2;
+  const sx = Math.round(p.x) + (p.dir < 0 ? -8 : 6), sy = FEET - 36 - lift;
+  R(ctx, sx + 3, sy + 6, 1, 14, '#6a4a2a');
+  R(ctx, sx - 2, sy, 11, 7, '#f4e4b8'); R(ctx, sx - 2, sy + 6, 11, 1, '#c8a878');
+  R(ctx, sx, sy + 2, 7, 3, '#e0a040'); R(ctx, sx + 1, sy + 1, 5, 1, '#e0a040'); // little taco
+  R(ctx, sx + 1, sy + 2, 1, 1, '#3a9a3a'); R(ctx, sx + 3, sy + 2, 1, 1, '#c83a2a'); R(ctx, sx + 5, sy + 2, 1, 1, '#3a9a3a');
+}
+
 function loadBusiness() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(BIZ_KEY) || 'null'); } catch (err) { s = null; }
@@ -533,6 +581,7 @@ function loadBusiness() {
     });
   }
   G.runner.hired = !!s.runner; G.runner.auto = !!s.auto;
+  for (const id of s.promo || []) if (G.promo[id]) G.promo[id].hired = true;
   if (s.order) for (const id of ORDER) G.runner.order[id] = Math.max(0, Math.min(9, s.order[id] | 0));
 }
 function saveBusiness() {
@@ -540,6 +589,7 @@ function saveBusiness() {
     localStorage.setItem(BIZ_KEY, JSON.stringify({
       trucks: G.trucks.length, staff: Object.fromEntries(COOKS.map(w => [w.id, G.staff[w.id].truck])),
       runner: G.runner.hired, auto: G.runner.auto, order: G.runner.order,
+      promo: PROMOTERS.filter(w => G.promo[w.id].hired).map(w => w.id),
     }));
   } catch (err) { /* storage blocked */ }
 }
@@ -726,9 +776,10 @@ function update(dt) {
     G.trucks.forEach((tr, i) => {
       if (i > 0 && !staffAt(i).length) return; // an extra truck only opens once it has a cook
       tr.spawnT -= dt;
-      if (tr.spawnT <= 0 && queue(i).length < 2) {
+      if (tr.spawnT <= 0 && queue(i).length < maxLine()) {
         spawnCustomer(i);
-        tr.spawnT = Math.max(5.5, 10.5 - G.served * 0.25) * rr(0.85, 1.15); // a customer every ~10s, down to ~5.5s
+        // a customer every ~10s, down to ~5.5s, and promoters bring them in faster still
+        tr.spawnT = Math.max(1.2, Math.max(5.5, 10.5 - G.served * 0.25) / crowdBoost()) * rr(0.85, 1.15);
       }
       queue(i).forEach((c, k) => { c.target = tr.off + SLOTS[k]; });
     });
@@ -757,6 +808,7 @@ function update(dt) {
     G.customers = G.customers.filter(c => c.x < WORLD_W + 20);
     updateCooks(dt);
     updateRunner(dt);
+    updatePromoters(dt);
   }
 
   // --- flying taco
@@ -1437,6 +1489,7 @@ function renderStreet(t) {
     if (rn.carrying) { const bx = Math.round(rn.x) + (rn.dir < 0 ? -11 : 7); R(b, bx, FEET - 16, 5, 6, '#c8a878'); R(b, bx, FEET - 16, 5, 1, '#e0c898'); }
     if (rn.onBreak) text3(ui, 'Z', rn.x + 6 + Math.floor(t * 2) % 2, FEET - 40, '#9fd0ff', '#1a0f14');
   }
+  for (const p of visiblePromoters()) drawPromoter(b, p, t);
   for (const c of G.customers) drawCustomer(b, c, t);
 
   // flying taco (base, so it gets lit)
@@ -1511,7 +1564,8 @@ function renderStreet(t) {
       e.restore();
     }
   }
-  if (rn.hired && rn.state !== 'shopping') drawCustomer(e, Object.assign({}, rn, { state: rn.state === 'toStore' || rn.state === 'back' ? 'walk' : 'idle' }), t);
+  for (const p of visiblePromoters()) drawPromoter(e, p, t);
+  if (rn.hired && rn.state !== 'shopping') drawCustomer(e,Object.assign({}, rn, { state: rn.state === 'toStore' || rn.state === 'back' ? 'walk' : 'idle' }), t);
   e.restore();
 
   // ---------- UI layer: order bubbles, cook status, market hover
@@ -1917,18 +1971,23 @@ function renderBusiness() {
   const r = G.runner;
   let h = '';
   if (bizMode === 'workers') {
-    const isHired = w => w.job === 'runner' ? r.hired : G.staff[w.id].truck !== null;
+    const isHired = w => w.job === 'runner' ? r.hired : w.job === 'promoter' ? G.promo[w.id].hired : G.staff[w.id].truck !== null;
     const hired = WORKERS.filter(isHired), free = WORKERS.filter(w => !isHired(w));
     $('bizTitle').textContent = `WORKERS: ${hired.length}`;
     const truckPicker = (w, sel) =>
       `<select data-assign="${w.id}">${G.trucks.map(t => `<option value="${t.i}" ${t.i === sel ? 'selected' : ''}>${truckName(t.i)}</option>`).join('')}</select>`;
     const card = (w, status, control, cls = '') =>
       `<div class="card ${cls}"><img class="face" src="${portraitURL(w)}" alt="">` +
-      `<div class="info"><div class="name">${w.name}</div><div class="job">${w.job === 'runner' ? 'STORE RUNNER' : 'TRUCK COOK'}</div>` +
+      `<div class="info"><div class="name">${w.name}</div><div class="job">${JOB_NAMES[w.job]}</div>` +
       `<div class="status">${status}</div></div><div class="ctrl">${control}</div></div>`;
 
     if (!hired.length) h += '<p class="dim">NO WORKERS YET. HIRE SOMEONE BELOW!</p>';
     for (const w of hired) {
+      if (w.job === 'promoter') {
+        h += card(w, `BRINGING CUSTOMERS · ${promoCount()} PROMOTERS = ${crowdBoost().toFixed(1)}X CROWDS`,
+          '<span class="assigned">ASSIGNED:</span><span class="ok">THE STREET</span>', 'hired');
+        continue;
+      }
       const s = w.job === 'runner' ? r : G.staff[w.id];
       const assigned = w.job === 'runner' ? '<span class="ok">STORE RUNS</span>' : truckPicker(w, s.truck);
       h += card(w, w.job === 'runner' ? 'ALWAYS READY TO RUN' : `<span class="live" data-shift="${w.id}">${shiftText(s)}</span>`,
@@ -1937,8 +1996,8 @@ function renderBusiness() {
     if (free.length) {
       h += '<h3 class="sub">HIRE MORE</h3>';
       for (const w of free) {
-        const price = w.job === 'runner' ? RUNNER_PRICE : COOK_PRICE;
-        h += card(w, w.job === 'runner' ? 'RUNS TO THE MARKET FOR YOU' : 'COOKS AND SERVES ON THEIR OWN',
+        const price = { runner: RUNNER_PRICE, promoter: PROMOTER_PRICE, cook: COOK_PRICE }[w.job];
+        h += card(w, { runner: 'RUNS TO THE MARKET FOR YOU', promoter: 'BRINGS MORE CUSTOMERS TO YOUR TRUCKS', cook: 'COOKS AND SERVES ON THEIR OWN' }[w.job],
           `<button data-act="hire" data-w="${w.id}">HIRE $${price}</button>`);
       }
     }
@@ -1994,6 +2053,11 @@ $('bizBody').addEventListener('click', ev => {
       if (spend(RUNNER_PRICE)) {
         Object.assign(r, { hired: true, x: RUNNER_HOME, state: 'idle', onBreak: false, shiftT: WORK_TIME });
         bizMsg('Leo is hired! Click him by your truck to send him shopping.');
+      }
+    } else if (w.job === 'promoter') {
+      if (spend(PROMOTER_PRICE)) {
+        Object.assign(G.promo[w.id], { hired: true, x: 200, state: 'out', goal: 330 });
+        bizMsg(`${w.name} is out bringing in customers!`);
       }
     } else {
       // new cooks start at the truck you clicked; move them with the ASSIGNED picker
