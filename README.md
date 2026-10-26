@@ -16,11 +16,13 @@ Scroll right with the mouse wheel (or drag, or use the arrows on the sides) to r
 
 ### Growing the business
 
-Open **BUSINESS** to spend your money:
+Everything is clicked right in the world:
 
-- **Cook ($100):** serves customers at a truck by themself, using your stock.
-- **Store runner ($100):** tell them what to buy and how many packs. They walk to the market, pay with your money and bring the stock back. Turn on auto-restock and they'll go whenever something gets low.
-- **New truck ($250):** opens further down the street. Hire it a cook to start selling there.
+- **Click any truck** to see your workers. Hire cooks ($100 each, 8 to choose from) and use the **ASSIGNED** picker to move them between trucks. Cooks in your truck work behind you and serve customers on their own.
+- **Leo the store runner ($100)** hangs out by your truck. Click him to choose what to buy and how many packs. He walks to the market, pays with your money and brings the stock back. Turn on auto-restock and he goes whenever something gets low.
+- **Click the FOR SALE lot** down the street to buy another truck ($250). It needs a cook before it can sell.
+
+Workers work for 1 minute, then take a 2-minute break. While a truck's cook is on break, scroll over and serve its customers yourself, or they'll walk off and cost you $5.
 
 Your money, stock, trucks and workers are saved in your browser. New players start with 20 of each ingredient.
 

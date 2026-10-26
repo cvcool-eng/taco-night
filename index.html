@@ -15,13 +15,13 @@
 
     <div id="hud">
       <div class="left">
-        <button id="pause" class="hudbtn" title="Pause (P)">II</button>
+        <button id="pause" class="hudbtn" title="Pause (P)" aria-label="Pause"><span class="icon"></span></button>
         <div class="stats">
           <div class="stat" id="money">$0</div>
           <div class="stat" id="served">SERVED 0</div>
         </div>
       </div>
-      <button id="bizBtn" class="hudbtn">BUSINESS</button>
+
     </div>
 
     <button id="navL" class="nav navL" hidden></button>
@@ -69,7 +69,7 @@
     <!-- hire cooks, a runner, and buy more trucks -->
     <div id="biz" class="overlay hidden">
       <div class="panel wide">
-        <h2>BUSINESS</h2>
+        <h2 id="bizTitle"></h2>
         <div id="bizBody"></div>
         <p id="bizMsg" class="msg"></p>
         <button id="bizClose" class="ghost">CLOSE</button>
