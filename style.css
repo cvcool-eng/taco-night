@@ -345,3 +345,11 @@ body { display: flex; align-items: center; justify-content: center; }
 /* panels still scroll, just without the white scrollbar */
 .panel { scrollbar-width: none; }
 .panel::-webkit-scrollbar { display: none; }
+/* the worker tabs stay pinned at the top while you scroll a long list */
+#bizBody .tabs {
+  position: sticky;
+  top: calc(var(--s) * -4px);
+  z-index: 2;
+  background: #120c16;
+  padding: calc(var(--s) * 1.5px) 0;
+}

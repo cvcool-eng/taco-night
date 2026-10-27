@@ -470,7 +470,20 @@ function mixedWorker(name, girl, job, i) {
   const SKINS = ['#ffdbac', '#f1c27d', '#e0a77a', '#c68642', '#8d5524', '#5c3a1e'];
   const CAPS = ['#e05a8a', '#8a4ac8', '#2a5aa8', '#2aa8a0', '#c83a2a', '#3a9a3a', '#5a5a6a', '#d8a020', '#e07a2a', '#3ac8e0'];
   const cap = CAPS[(i * 3) % CAPS.length];
-  return { id: name.toLowerCase(), name, job, girl: !!girl, hair: HAIRS[(i * 5) % HAIRS.length], skin: SKINS[(i * 7) % SKINS.length], cap, apron: cap };
+  return { id: name.toLowerCase().replace(/[^a-z]+/g, '_').replace(/_$/, ''), name, job, girl: !!girl, hair: HAIRS[(i * 5) % HAIRS.length], skin: SKINS[(i * 7) % SKINS.length], cap, apron: cap };
+}
+function extraWorkers(count) {
+  const BOYS = ['ALEX', 'BENI', 'CESAR', 'DANI', 'EDGAR', 'FRAN', 'GIL', 'HECTOR', 'IKER', 'JOSE', 'KIKO', 'LEON', 'MANU',
+    'NESTOR', 'OMAR', 'PEDRO', 'QUIQUE', 'RAMON', 'SANTI', 'TEO', 'UMBERTO', 'VALEN', 'WILLY', 'XAVI', 'YAGO'];
+  const GIRLS = ['ABRIL', 'BLANCA', 'CLARA', 'DULCE', 'EVA', 'FLOR', 'GALA', 'HILDA', 'IRIS', 'JIMENA', 'KARLA', 'LIA', 'MAR',
+    'NOEMI', 'OFELIA', 'PERLA', 'QUETA', 'REINA', 'SOL', 'TANIA', 'URSULA', 'VERA', 'WENDY', 'YARA', 'ZOE'];
+  const LETTERS = 'ABCDEFGHIJKLMNOPRSTVZ';
+  const out = [];
+  for (let k = 0; k < count; k++) {
+    const girl = k % 2 === 1, pool = girl ? GIRLS : BOYS, j = k >> 1;
+    out.push({ name: `${pool[j % pool.length]} ${LETTERS[Math.floor(j / pool.length) % LETTERS.length]}.`, girl });
+  }
+  return out;
 }
 const WORKERS = [
   { id: 'maria', name: 'MARIA', job: 'cook', girl: true, hair: '#2a1a10', skin: '#c68642', cap: '#e05a8a', apron: '#e05a8a' },
@@ -492,6 +505,8 @@ const WORKERS = [
   ...[['CHUY', 0], ['LOLA', 1], ['PEPE', 0], ['NINA', 1], ['BETO', 0], ['PACA', 1], ['TITO', 0], ['YOLI', 1], ['MEMO', 0], ['KIKA', 1],
     ['PACO', 0], ['LUPE', 1], ['CHEPE', 0], ['MAYA', 1], ['TONO', 0], ['BELA', 1], ['NACHO', 0], ['FRIDA', 1], ['LALO', 0], ['GABY', 1]]
     .map(([name, girl], i) => mixedWorker(name, girl, 'promoter', i + 3)),
+  // and 200 more of each, named like "ALEX R." so nobody shares a name
+  ...extraWorkers(400).map((n, i) => mixedWorker(n.name, n.girl, i < 200 ? 'cook' : 'promoter', i + 70)),
   { id: 'leo', name: 'LEO', job: 'runner', girl: false, hair: '#5a3a1a', skin: '#e0a77a', cap: '#ff8a20', apron: '#ff8a20' },
 ];
 const COOKS = WORKERS.filter(w => w.job === 'cook');
@@ -780,7 +795,7 @@ function update(dt) {
       if (tr.spawnT <= 0 && queue(i).length < maxLine()) {
         spawnCustomer(i);
         // a customer every ~10s, down to ~5.5s, and promoters bring them in faster still
-        tr.spawnT = Math.max(1.2, Math.max(5.5, 10.5 - G.served * 0.25) / crowdBoost()) * rr(0.85, 1.15);
+        tr.spawnT = Math.max(0.4, Math.max(5.5, 10.5 - G.served * 0.25) / crowdBoost()) * rr(0.85, 1.15);
       }
       queue(i).forEach((c, k) => { c.target = tr.off + SLOTS[k]; });
     });
@@ -942,9 +957,18 @@ function updateRunner(dt) {
   if (!r.hired) return;
   const speed = r.autoTrip ? 80 : 42; // he sprints on auto-restock runs so you never run dry
   if (r.state === 'idle' && (r.lookT -= dt) <= 0) { r.dir = pick([-1, -1, 1]); r.lookT = rr(2, 5); } // chilling, glancing around
+  // he keeps an eye on how fast each item is being used, so a busier business
+  // makes him leave earlier and buy more (enough to cover ~12s of tacos)
+  r.rate = r.rate || {}; r.prev = r.prev || { ...G.stock };
+  for (const id of ORDER) {
+    const used = Math.max(0, r.prev[id] - G.stock[id]);
+    r.rate[id] = (r.rate[id] || 0) + (used - (r.rate[id] || 0) * dt) / 20; // per-second usage, averaged over ~20s
+    r.prev[id] = G.stock[id];
+  }
+  r.low = id => Math.max(AUTO_LOW, Math.ceil(r.rate[id] * 12));
   // auto-restock: before anything can run out, he goes and fills every item back up
   if (r.cooldown > 0) r.cooldown -= dt;
-  if (r.state === 'idle' && r.auto && !(r.cooldown > 0) && ORDER.some(id => G.stock[id] < AUTO_LOW)) {
+  if (r.state === 'idle' && r.auto && !(r.cooldown > 0) && ORDER.some(id => G.stock[id] < r.low(id))) {
     r.state = 'toStore'; r.autoTrip = true; r.msg = 'Running low! Restocking everything';
   }
   if (r.state === 'toStore') {
@@ -958,7 +982,7 @@ function updateRunner(dt) {
       if (r.autoTrip) {
         // enough packs to get every item above AUTO_TARGET, bought one pack at a time
         // round the list (empty items first) so a short wallet is shared out fairly
-        const need = Object.fromEntries(ORDER.map(id => [id, Math.max(0, Math.ceil((AUTO_TARGET + 1 - G.stock[id]) / PACK_SIZE))]));
+        const need = Object.fromEntries(ORDER.map(id => [id, Math.max(0, Math.ceil((Math.max(AUTO_TARGET, r.low(id) * 2) + 1 - G.stock[id]) / PACK_SIZE))]));
         const turn = ORDER.slice().sort((a, b) => G.stock[a] - G.stock[b]);
         while (G.money >= PACK_PRICE && turn.some(id => need[id] > 0)) {
           for (const id of turn) {
@@ -1143,8 +1167,9 @@ function drawWorkerHead(c, w, sx0, y0, hatHop = 0, look = 0, eyes = 'open', mout
 const portraitCache = {};
 function portraitURL(w) {
   if (portraitCache[w.id]) return portraitCache[w.id];
-  const pc = document.createElement('canvas'); pc.width = 20; pc.height = 20;
+  const pc = portraitURL.pc || (portraitURL.pc = Object.assign(document.createElement('canvas'), { width: 20, height: 20 }));
   const g = pc.getContext('2d');
+  g.clearRect(0, 0, 20, 20);
   R(g, 0, 0, 20, 20, '#2a1a24'); R(g, 0, 14, 20, 6, '#3a2430');
   sprite(g, 2, 14, CHEF_BODY.slice(0, 6), workerPal(w));
   R(g, 2, 15, 3, 5, '#181820'); R(g, 15, 15, 3, 5, '#181820'); // shoulders
@@ -1979,7 +2004,7 @@ $('shopClose').addEventListener('click', closeShop);
 
 // ---- managing the business: one pop-up with three faces ----
 //  'workers' (click a truck), 'lot' (click the FOR SALE sign), 'leo' (click Leo)
-let bizMode = 'workers', bizTruck = 0; // bizTruck: the truck you clicked to open the workers list
+let bizMode = 'workers', bizTab = 'truck', bizTruck = 0; // bizTruck: the truck you clicked to open the workers list
 function openBusiness(mode) {
   bizMode = mode;
   G.menu = true; // the game waits while you manage things
@@ -1998,16 +2023,21 @@ function renderBusiness() {
   let h = '';
   if (bizMode === 'workers') {
     const isHired = w => w.job === 'runner' ? r.hired : w.job === 'promoter' ? G.promo[w.id].hired : G.staff[w.id].truck !== null;
-    const hired = WORKERS.filter(isHired), free = WORKERS.filter(w => !isHired(w));
-    $('bizTitle').textContent = `WORKERS: ${hired.length}`;
+    $('bizTitle').textContent = `WORKERS: ${WORKERS.filter(isHired).length}`;
+    // two tabs: cooks in the trucks, and everyone out on the street (promoters and Leo)
+    const inTab = w => (w.job === 'cook') === (bizTab === 'truck');
+    const tabCount = tab => WORKERS.filter(w => isHired(w) && (w.job === 'cook') === (tab === 'truck')).length;
+    h += `<div class="tabs"><button class="tab ${bizTab === 'truck' ? 'on' : ''}" data-act="tab" data-tab="truck">TRUCK WORKERS (${tabCount('truck')})</button>` +
+      `<button class="tab ${bizTab === 'street' ? 'on' : ''}" data-act="tab" data-tab="street">STREET WORKERS (${tabCount('street')})</button></div>`;
+    const hired = WORKERS.filter(w => inTab(w) && isHired(w)), free = WORKERS.filter(w => inTab(w) && !isHired(w));
     const truckPicker = (w, sel) =>
       `<select data-assign="${w.id}">${G.trucks.map(t => `<option value="${t.i}" ${t.i === sel ? 'selected' : ''}>${truckName(t.i)}</option>`).join('')}</select>`;
     const card = (w, status, control, cls = '') =>
-      `<div class="card ${cls}"><img class="face" src="${portraitURL(w)}" alt="">` +
+      `<div class="card ${cls}">${faceImg(w)}` +
       `<div class="info"><div class="name">${w.name}</div><div class="job">${JOB_NAMES[w.job]}</div>` +
       `<div class="status">${status}</div></div><div class="ctrl">${control}</div></div>`;
 
-    if (!hired.length) h += '<p class="dim">NO WORKERS YET. HIRE SOMEONE BELOW!</p>';
+    if (!hired.length) h += `<p class="dim">NO ${bizTab === 'truck' ? 'TRUCK' : 'STREET'} WORKERS YET. HIRE SOMEONE BELOW!</p>`;
     for (const w of hired) {
       if (w.job === 'promoter') {
         h += card(w, `BRINGING CUSTOMERS · ${promoCount()} PROMOTERS = ${crowdBoost().toFixed(1)}X CROWDS`,
@@ -2047,6 +2077,22 @@ function renderBusiness() {
     h += `<div class="biz-row"><span class="dim" id="runStatus">${runnerStatus()}</span></div></div>`;
   }
   $('bizBody').innerHTML = h;
+  fillFaces();
+}
+// faces that aren't drawn yet are filled in a few per frame, so a list of
+// hundreds of workers opens right away
+function faceImg(w) {
+  return portraitCache[w.id] ? `<img class="face" src="${portraitCache[w.id]}" alt="">` : `<img class="face" data-face="${w.id}" alt="">`;
+}
+function fillFaces() {
+  if (fillFaces.busy) return;
+  fillFaces.busy = true;
+  const step = () => {
+    const imgs = [...document.querySelectorAll('#bizBody img[data-face]')].slice(0, 12);
+    for (const img of imgs) { img.src = portraitURL(workerById(img.dataset.face)); img.removeAttribute('data-face'); }
+    if (imgs.length) requestAnimationFrame(step); else fillFaces.busy = false;
+  };
+  requestAnimationFrame(step);
 }
 function renderLeoIfOpen() { if (!bizEl.classList.contains('hidden') && bizMode === 'leo') renderBusiness(); }
 function runnerStatus() {
@@ -2073,6 +2119,11 @@ $('bizBody').addEventListener('click', ev => {
   const btn = ev.target.closest('[data-act]');
   if (!btn || btn.disabled) return;
   const act = btn.dataset.act, r = G.runner;
+  if (act === 'tab') {
+    bizTab = btn.dataset.tab; $('bizMsg').textContent = '';
+    renderBusiness(); $('bizBody').scrollTop = 0; bizEl.querySelector('.panel').scrollTop = 0;
+    return;
+  }
   if (act === 'hire') {
     const w = workerById(btn.dataset.w);
     if (w.job === 'runner') {
