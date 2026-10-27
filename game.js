@@ -8,7 +8,7 @@
 const W = 256, H = 144, HORIZON = 100, N = W * H;
 let OY = -30; // camera height (the market interior temporarily uses 0)
 const HZ = HORIZON + OY;
-const WORLD_W = 1340, HILLS_W = 700;      // the street: your truck, the market, then lots for more trucks
+const WORLD_W = 2540, HILLS_W = 1100;     // the street: your truck, the market, then lots for more trucks
 const CAM_TRUCK = 40, CAM_MARKET = 332;  // camera left edge (world x) for each view
 let camX = CAM_TRUCK, camTarget = CAM_TRUCK, OX = -CAM_TRUCK;
 // The world is drawn at 320x180 coordinates; the camera shows a zoomed-in 256x144
@@ -453,7 +453,7 @@ const chef = {
 function setPose(p, dur) { chef.pose = p; chef.poseT = dur; }
 
 // ---- business: extra trucks, cooks and a store runner ----
-const TRUCK_SPOTS = [0, 560, 800, 1040]; // world x offset of each truck (yours is first)
+const TRUCK_SPOTS = [0, 560, 800, 1040, 1280, 1520, 1760, 2000, 2240]; // world x offset of each truck (yours is first)
 const COOK_PRICE = 100, RUNNER_PRICE = 100, TRUCK_PRICE = 250;
 const COOK_TIME = 2.5;                  // seconds one cook takes per taco
 const MIN_COOK_TIME = 0.2;              // the fastest a huge crew can get
@@ -470,7 +470,7 @@ function mixedWorker(name, girl, job, i) {
   const SKINS = ['#ffdbac', '#f1c27d', '#e0a77a', '#c68642', '#8d5524', '#5c3a1e'];
   const CAPS = ['#e05a8a', '#8a4ac8', '#2a5aa8', '#2aa8a0', '#c83a2a', '#3a9a3a', '#5a5a6a', '#d8a020', '#e07a2a', '#3ac8e0'];
   const cap = CAPS[(i * 3) % CAPS.length];
-  return { id: name.toLowerCase().replace(/[^a-z]+/g, '_').replace(/_$/, ''), name, job, girl: !!girl, hair: HAIRS[(i * 5) % HAIRS.length], skin: SKINS[(i * 7) % SKINS.length], cap, apron: cap };
+  return { id: name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, ''), name, job, girl: !!girl, hair: HAIRS[(i * 5) % HAIRS.length], skin: SKINS[(i * 7) % SKINS.length], cap, apron: cap };
 }
 function extraWorkers(count) {
   const BOYS = ['ALEX', 'BENI', 'CESAR', 'DANI', 'EDGAR', 'FRAN', 'GIL', 'HECTOR', 'IKER', 'JOSE', 'KIKO', 'LEON', 'MANU',
@@ -508,10 +508,13 @@ const WORKERS = [
   // and 200 more of each, named like "ALEX R." so nobody shares a name
   ...extraWorkers(400).map((n, i) => mixedWorker(n.name, n.girl, i < 200 ? 'cook' : 'promoter', i + 70)),
   { id: 'leo', name: 'LEO', job: 'runner', girl: false, hair: '#5a3a1a', skin: '#e0a77a', cap: '#ff8a20', apron: '#ff8a20' },
+  // more Leos: extra store runners, all in Leo's orange cap
+  ...Array.from({ length: 9 }, (_, i) => ({ ...mixedWorker(`LEO ${i + 2}`, false, 'runner', i * 4 + 1), cap: '#ff8a20', apron: '#ff8a20' })),
 ];
 const COOKS = WORKERS.filter(w => w.job === 'cook');
 const PROMOTERS = WORKERS.filter(w => w.job === 'promoter');
-const RUNNER = WORKERS.find(w => w.job === 'runner');
+const RUNNERS = WORKERS.filter(w => w.job === 'runner');
+const RUNNER = RUNNERS[0]; // Leo himself
 const JOB_NAMES = { cook: 'TRUCK COOK', runner: 'STORE RUNNER', promoter: 'PROMOTER' };
 const workerById = id => WORKERS.find(w => w.id === id) || null;
 
@@ -531,14 +534,21 @@ function hireCook(id, truck) {
   Object.assign(G.staff[id], { truck, onBreak: false, shiftT: WORK_TIME, cooking: null, x: 146, goal: 146 });
 }
 
-G.runner = {
-  hired: false, auto: false, order: Object.fromEntries(ORDER.map(id => [id, 0])),
-  state: 'idle', x: RUNNER_HOME, dir: -1, walkT: 0, t: 0, lookT: 3, carrying: null, msg: '',
-  onBreak: false, shiftT: WORK_TIME,
-  // Leo's looks: an orange cap and shirt so you can spot him
-  shirt: RUNNER.cap, pants: '#2b3550', skin: RUNNER.skin, hair: RUNNER.hair, hat: RUNNER.cap, stache: false,
-  patience: 1, maxPatience: 1, shake: 0, mood: 'ok', bob: 0,
-};
+// Store runners: Leo and the extra Leos each hang out at their own spot by your truck
+G.runners = RUNNERS.map((w, k) => {
+  const home = 290 - k * 8; // in a row by the right side of your truck: 290, 282, 274...
+  return {
+    w, id: w.id, home, hired: false, auto: false, order: Object.fromEntries(ORDER.map(id => [id, 0])),
+    state: 'idle', x: home, dir: -1, walkT: 0, t: 0, lookT: 3, carrying: null, msg: '',
+    onBreak: false, shiftT: WORK_TIME,
+    // the orange cap and shirt so you can spot a runner
+    shirt: w.cap, pants: '#2b3550', skin: w.skin, hair: w.hair, hat: w.cap, stache: false,
+    patience: 1, maxPatience: 1, shake: 0, mood: 'ok', bob: 0,
+  };
+});
+G.runner = G.runners[0]; // Leo; his AUTO-RESTOCK switch is shared by every runner
+const runnerOf = id => G.runners.find(r => r.id === id) || null;
+let curRunner = G.runner; // whose shopping list is open
 // Promoters walk off into the dark with a TACOS sign and come back to wave it
 // by your truck. Every one you hire brings customers to all trucks faster.
 const PROMOTER_PRICE = 100;
@@ -550,7 +560,15 @@ G.promo = Object.fromEntries(PROMOTERS.map(w => [w.id, {
 const promoCount = () => PROMOTERS.filter(w => G.promo[w.id].hired).length;
 // each promoter adds 30% more customers, and longer lines are allowed with more of them
 const crowdBoost = () => 1 + promoCount() * 0.3;
-const maxLine = () => Math.min(SLOTS.length, 2 + Math.floor(promoCount() / 3));
+// lines have no real limit; the cap only keeps a runaway crowd from freezing the game
+const MAX_LINE = 150;
+// spots in line: the four by the window, then a tighter bunch behind them. Past
+// SHOWN_LINE people the rest wait out of sight (still in line, just not drawn)
+// so long lines don't spill across the other trucks.
+const SHOWN_LINE = 8;
+const slotX = k => k < SLOTS.length ? SLOTS[k] : SLOTS[SLOTS.length - 1] - Math.min(k - SLOTS.length + 1, SHOWN_LINE - SLOTS.length) * 14;
+// the longer the line, the faster people hurry in (up to 5x)
+const hurry = len => Math.min(5, Math.max(1, len / 4));
 function updatePromoters(dt) {
   for (const w of PROMOTERS) {
     const p = G.promo[w.id];
@@ -562,7 +580,7 @@ function updatePromoters(dt) {
       if (Math.abs(dx) < 0.5) { p.state = p.state === 'out' ? 'away' : 'wave'; p.t = p.state === 'away' ? rr(4, 9) : rr(3, 6); }
     } else if ((p.t -= dt) <= 0) {
       if (p.state === 'wave') { p.state = 'out'; p.goal = 330; }
-      else { p.state = 'back'; p.goal = rr(178, 252); }
+      else { p.state = 'back'; p.goal = rr(150, 208); }
     }
   }
 }
@@ -597,6 +615,7 @@ function loadBusiness() {
     });
   }
   G.runner.hired = !!s.runner; G.runner.auto = !!s.auto;
+  for (const id of s.runners || []) if (runnerOf(id)) runnerOf(id).hired = true;
   for (const id of s.promo || []) if (G.promo[id]) G.promo[id].hired = true;
   if (s.order) for (const id of ORDER) G.runner.order[id] = Math.max(0, Math.min(9, s.order[id] | 0));
 }
@@ -605,6 +624,7 @@ function saveBusiness() {
     localStorage.setItem(BIZ_KEY, JSON.stringify({
       trucks: G.trucks.length, staff: Object.fromEntries(COOKS.map(w => [w.id, G.staff[w.id].truck])),
       runner: G.runner.hired, auto: G.runner.auto, order: G.runner.order,
+      runners: G.runners.filter(r => r.hired).map(r => r.id),
       promo: PROMOTERS.filter(w => G.promo[w.id].hired).map(w => w.id),
     }));
   } catch (err) { /* storage blocked */ }
@@ -792,23 +812,26 @@ function update(dt) {
     G.trucks.forEach((tr, i) => {
       if (i > 0 && !staffAt(i).length) return; // an extra truck only opens once it has a cook
       tr.spawnT -= dt;
-      if (tr.spawnT <= 0 && queue(i).length < maxLine()) {
+      if (tr.spawnT <= 0 && queue(i).length < MAX_LINE) {
         spawnCustomer(i);
-        // a customer every ~10s, down to ~5.5s, and promoters bring them in faster still
-        tr.spawnT = Math.max(0.4, Math.max(5.5, 10.5 - G.served * 0.25) / crowdBoost()) * rr(0.85, 1.15);
+        // a customer every ~10s, down to ~5.5s, and promoters bring them in faster with no limit
+        tr.spawnT = Math.max(5.5, 10.5 - G.served * 0.25) / crowdBoost() * rr(0.85, 1.15);
       }
-      queue(i).forEach((c, k) => { c.target = tr.off + SLOTS[k]; });
     });
+    const lines = G.trucks.map(tr => queue(tr.i));
+    lines.forEach((q, i) => q.forEach((c, k) => { c.target = G.trucks[i].off + slotX(k); c.hidden = k >= SHOWN_LINE; }));
     for (const c of G.customers) {
       c.shake = Math.max(0, c.shake - dt);
+      const pace = hurry(lines[c.truck] ? lines[c.truck].length : 0);
       if (c.state === 'leave') {
-        c.x += 34 * dt; c.walkT += dt; c.dir = 1;
+        c.x += 34 * pace * dt; c.walkT += dt * pace; c.dir = 1;
         continue;
       }
-      const first = queue(c.truck)[0];
+      const first = lines[c.truck][0];
       const dx = c.target - c.x;
       if (Math.abs(dx) > 0.6) {
-        c.x += Math.sign(dx) * Math.min(Math.abs(dx), 30 * dt);
+        c.x += Math.sign(dx) * Math.min(Math.abs(dx), 30 * pace * dt);
+        c.walkT += dt * (pace - 1); // legs keep up with the hurry
         c.walkT += dt; c.dir = Math.sign(dx); c.state = 'walk';
       } else {
         c.x = c.target;
@@ -821,7 +844,8 @@ function update(dt) {
         if (c.patience <= 0) customerLeftAngry(c);
       }
     }
-    G.customers = G.customers.filter(c => c.state !== 'leave' || c.x < WORLD_W + 40); // only drop people who walked off (truck 4's arrive from past the edge)
+    // drop people who've walked off out of sight (the last truck's customers arrive from past the edge)
+    G.customers = G.customers.filter(c => c.state !== 'leave' || (c.x < WORLD_W + 40 && (onScreen(c.x) || c.x < G.trucks[c.truck].off + 330)));
     updateCooks(dt);
     updateRunner(dt);
     updatePromoters(dt);
@@ -942,33 +966,36 @@ function updateCooks(dt) {
 
 // The runner walks to the market, buys the packs you asked for with your
 // money, and walks back to stock the trucks.
-function runnerPacks() { return ORDER.reduce((n, id) => n + G.runner.order[id], 0); }
-function sendRunner() {
-  const r = G.runner;
+function runnerPacks(r = curRunner) { return ORDER.reduce((n, id) => n + r.order[id], 0); }
+function sendRunner(r = curRunner) {
   if (!r.hired) return 'Hire a runner first';
-  if (r.onBreak) return 'Leo is on break. Try again soon';
-  if (r.state !== 'idle') return 'The runner is already on a trip';
-  if (!runnerPacks()) return 'Pick what to buy first';
+  if (r.state !== 'idle') return `${r.w.name} is already on a trip`;
+  if (!runnerPacks(r)) return 'Pick what to buy first';
   r.state = 'toStore'; r.msg = 'Heading to the market';
   return 'Runner is on the way!';
 }
+// The runners keep an eye on how fast each item is being used, so a busier
+// business makes them leave earlier and buy more (enough to cover ~20s of tacos)
+const usage = { rate: Object.fromEntries(ORDER.map(id => [id, 0])), prev: null };
+const autoLow = id => Math.max(AUTO_LOW, Math.ceil(usage.rate[id] * 20));
 function updateRunner(dt) {
-  const r = G.runner;
-  if (!r.hired) return;
-  const speed = r.autoTrip ? 80 : 42; // he sprints on auto-restock runs so you never run dry
-  if (r.state === 'idle' && (r.lookT -= dt) <= 0) { r.dir = pick([-1, -1, 1]); r.lookT = rr(2, 5); } // chilling, glancing around
-  // he keeps an eye on how fast each item is being used, so a busier business
-  // makes him leave earlier and buy more (enough to cover ~12s of tacos)
-  r.rate = r.rate || {}; r.prev = r.prev || { ...G.stock };
+  usage.prev = usage.prev || { ...G.stock };
   for (const id of ORDER) {
-    const used = Math.max(0, r.prev[id] - G.stock[id]);
-    r.rate[id] = (r.rate[id] || 0) + (used - (r.rate[id] || 0) * dt) / 20; // per-second usage, averaged over ~20s
-    r.prev[id] = G.stock[id];
+    const used = Math.max(0, usage.prev[id] - G.stock[id]);
+    usage.rate[id] += (used - usage.rate[id] * dt) / 20; // per-second usage, averaged over ~20s
+    usage.prev[id] = G.stock[id];
   }
-  r.low = id => Math.max(AUTO_LOW, Math.ceil(r.rate[id] * 12));
-  // auto-restock: before anything can run out, he goes and fills every item back up
+  for (const r of G.runners) if (r.hired) updateOneRunner(r, dt);
+  refreshBusinessLive();
+}
+function updateOneRunner(r, dt) {
+  const speed = r.autoTrip ? 80 : 42; // runners sprint on auto-restock runs so you never run dry
+  if (r.state === 'idle' && (r.lookT -= dt) <= 0) { r.dir = pick([-1, -1, 1]); r.lookT = rr(2, 5); } // chilling, glancing around
+  // auto-restock: before anything can run out, an idle runner goes and fills every
+  // item back up (one auto run at a time, so they don't all buy the same thing)
   if (r.cooldown > 0) r.cooldown -= dt;
-  if (r.state === 'idle' && r.auto && !(r.cooldown > 0) && ORDER.some(id => G.stock[id] < r.low(id))) {
+  const autoBusy = G.runners.some(o => o.autoTrip && (o.state === 'toStore' || o.state === 'shopping'));
+  if (r.state === 'idle' && G.runner.auto && !autoBusy && !(r.cooldown > 0) && ORDER.some(id => G.stock[id] < autoLow(id))) {
     r.state = 'toStore'; r.autoTrip = true; r.msg = 'Running low! Restocking everything';
   }
   if (r.state === 'toStore') {
@@ -982,7 +1009,7 @@ function updateRunner(dt) {
       if (r.autoTrip) {
         // enough packs to get every item above AUTO_TARGET, bought one pack at a time
         // round the list (empty items first) so a short wallet is shared out fairly
-        const need = Object.fromEntries(ORDER.map(id => [id, Math.max(0, Math.ceil((Math.max(AUTO_TARGET, r.low(id) * 2) + 1 - G.stock[id]) / PACK_SIZE))]));
+        const need = Object.fromEntries(ORDER.map(id => [id, Math.max(0, Math.ceil((Math.max(AUTO_TARGET, autoLow(id) * 2) + 1 - G.stock[id]) / PACK_SIZE))]));
         const turn = ORDER.slice().sort((a, b) => G.stock[a] - G.stock[b]);
         while (G.money >= PACK_PRICE && turn.some(id => need[id] > 0)) {
           for (const id of turn) {
@@ -991,7 +1018,7 @@ function updateRunner(dt) {
             r.carrying[id] = (r.carrying[id] || 0) + PACK_SIZE;
           }
         }
-        if (!bought) r.cooldown = 15; // broke: wait a bit before trying again
+        if (!bought) G.runners.forEach(o => { o.cooldown = 15; }); // broke: wait a bit before trying again
       } else {
         for (const id of ORDER) {
           const packs = Math.min(r.order[id], Math.floor(G.money / PACK_PRICE));
@@ -1008,8 +1035,8 @@ function updateRunner(dt) {
     }
   } else if (r.state === 'back') {
     r.x -= speed * dt; r.walkT += dt; r.dir = -1;
-    if (r.x <= RUNNER_HOME) {
-      r.x = RUNNER_HOME; r.dir = -1; r.state = 'idle';
+    if (r.x <= r.home) {
+      r.x = r.home; r.dir = -1; r.state = 'idle';
       for (const id in r.carrying) {
         G.stock[id] += r.carrying[id];
         addPart({ type: 'icon', id, x: r.x + rr(-6, 6), y: FEET - 40, vy: -12, life: 1.4, max: 1.4 });
@@ -1027,7 +1054,6 @@ function updateRunner(dt) {
       if (onScreen(r.x)) sfx.bell();
     }
   }
-  refreshBusinessLive();
 }
 // ---------------------------------------------------------------------
 //  drawing
@@ -1532,16 +1558,15 @@ function renderStreet(t) {
     R(b, bl.x, bl.y, 2, 2, '#fff0c8');
   }
 
-  // the runner (inside the market while shopping)
-  const rn = G.runner;
-  if (rn.hired && rn.state !== 'shopping') {
+  // the runners (inside the market while shopping)
+  for (const rn of G.runners) {
+    if (!rn.hired || rn.state === 'shopping') continue;
     const moving = rn.state === 'toStore' || rn.state === 'back';
     drawCustomer(b, Object.assign({}, rn, { state: moving ? 'walk' : 'idle' }), t);
     if (rn.carrying) { const bx = Math.round(rn.x) + (rn.dir < 0 ? -11 : 7); R(b, bx, FEET - 16, 5, 6, '#c8a878'); R(b, bx, FEET - 16, 5, 1, '#e0c898'); }
-    if (rn.onBreak) text3(ui, 'Z', rn.x + 6 + Math.floor(t * 2) % 2, FEET - 40, '#9fd0ff', '#1a0f14');
   }
   for (const p of visiblePromoters()) drawPromoter(b, p, t);
-  for (const c of G.customers) drawCustomer(b, c, t);
+  for (const c of G.customers) if (!c.hidden && onScreen(c.x)) drawCustomer(b, c, t);
 
   // flying taco (base, so it gets lit)
   if (G.flying) {
@@ -1602,7 +1627,7 @@ function renderStreet(t) {
   // people block the glow of lit windows behind them (the emit layer is drawn on top)
   e.save();
   e.globalCompositeOperation = 'destination-out';
-  for (const c of G.customers) if (onScreen(c.x)) drawCustomer(e, c, t);
+  for (const c of G.customers) if (!c.hidden && onScreen(c.x)) drawCustomer(e, c, t);
   // ...and cooks block the grill flames, embers and hood light behind them
   for (const tr of G.trucks) {
     if (!onScreen(tr.off + 146)) continue;
@@ -1616,13 +1641,14 @@ function renderStreet(t) {
     }
   }
   for (const p of visiblePromoters()) drawPromoter(e, p, t);
-  if (rn.hired && rn.state !== 'shopping') drawCustomer(e,Object.assign({}, rn, { state: rn.state === 'toStore' || rn.state === 'back' ? 'walk' : 'idle' }), t);
+  for (const rn of G.runners)
+    if (rn.hired && rn.state !== 'shopping') drawCustomer(e, Object.assign({}, rn, { state: rn.state === 'toStore' || rn.state === 'back' ? 'walk' : 'idle' }), t);
   e.restore();
 
   // ---------- UI layer: order bubbles, cook status, market hover
   G.trucks.forEach((tr, i) => {
     queue(i).forEach((c, k) => {
-      if (c.state !== 'wait') return;
+      if (c.state !== 'wait' || c.hidden || !onScreen(c.x)) return;
       if (k === 0) drawBubble(c, t); else drawMiniPatience(c);
     });
     if (staffAt(i).some(s => s.noStock) && Math.floor(t * 3) % 2) text3(ui, '!', tr.off + 146, 70, '#ff5a3a', '#1a0f14');
@@ -1910,8 +1936,10 @@ function lotRect() {
 function updateHover(gx, gy) {
   hover.market = false; hover.lot = false; hover.shelf = null; hover.exit = false; hover.truck = null; hover.leo = false;
   if (G.scene === 'street') {
-    const wx = gx + camX, wy = gy - OY, lot = lotRect(), r = G.runner;
-    hover.leo = r.hired && r.state === 'idle' && inRect(wx, wy, { x: r.x - 9, y: FEET - 34, w: 18, h: 36 });
+    const wx = gx + camX, wy = gy - OY, lot = lotRect();
+    // the runner nearest the mouse, so standing close together they're still easy to pick
+    hover.leo = G.runners.filter(r => r.hired && r.state === 'idle' && inRect(wx, wy, { x: r.x - 6, y: FEET - 34, w: 12, h: 36 }))
+      .sort((a, b) => Math.abs(a.x - wx) - Math.abs(b.x - wx))[0] || false;
     hover.market = !hover.leo && inRect(wx, wy, { x: MKT.x, y: MKT.y, w: MKT.w, h: MKT.h + 6 });
     hover.lot = !!lot && inRect(wx, wy, lot);
     if (!hover.leo && !hover.market && !hover.lot)
@@ -1927,7 +1955,7 @@ let lastSceneChange = 0;
 function clickGame() {
   if (G.paused || performance.now() - lastSceneChange < 350) return; // one click shouldn't enter and shop at once
   if (G.scene === 'street') {
-    if (hover.leo) openBusiness('leo');
+    if (hover.leo) { curRunner = hover.leo; openBusiness('leo'); }
     else if (hover.market) enterMarket();
     else if (hover.lot) openBusiness('lot');
     else if (hover.truck) { bizTruck = hover.truck.i; openBusiness('workers'); }
@@ -2022,7 +2050,7 @@ function renderBusiness() {
   const r = G.runner;
   let h = '';
   if (bizMode === 'workers') {
-    const isHired = w => w.job === 'runner' ? r.hired : w.job === 'promoter' ? G.promo[w.id].hired : G.staff[w.id].truck !== null;
+    const isHired = w => w.job === 'runner' ? runnerOf(w.id).hired : w.job === 'promoter' ? G.promo[w.id].hired : G.staff[w.id].truck !== null;
     $('bizTitle').textContent = `WORKERS: ${WORKERS.filter(isHired).length}`;
     // two tabs: cooks in the trucks, and everyone out on the street (promoters and Leo)
     const inTab = w => (w.job === 'cook') === (bizTab === 'truck');
@@ -2044,9 +2072,9 @@ function renderBusiness() {
           '<span class="assigned">ASSIGNED:</span><span class="ok">THE STREET</span>', 'hired');
         continue;
       }
-      const s = w.job === 'runner' ? r : G.staff[w.id];
+      const s = w.job === 'runner' ? runnerOf(w.id) : G.staff[w.id];
       const assigned = w.job === 'runner' ? '<span class="ok">STORE RUNS</span>' : truckPicker(w, s.truck);
-      h += card(w, w.job === 'runner' ? 'ALWAYS READY TO RUN' : `<span class="live" data-shift="${w.id}">${shiftText(s)}</span>`,
+      h += card(w, w.job === 'runner' ? 'ALWAYS READY · CLICK HIM BY YOUR TRUCK' : `<span class="live" data-shift="${w.id}">${shiftText(s)}</span>`,
         `<span class="assigned">ASSIGNED:</span>${assigned}`, 'hired');
     }
     if (free.length) {
@@ -2062,18 +2090,19 @@ function renderBusiness() {
     h += `<p>OPEN TRUCK ${G.trucks.length + 1} RIGHT HERE.<br>IT NEEDS A COOK BEFORE IT CAN SELL TACOS.</p>` +
       `<div class="btnrow"><button data-act="truck">BUY TRUCK $${TRUCK_PRICE}</button></div>`;
   } else {
-    $('bizTitle').textContent = 'LEO’S SHOPPING LIST';
-    h += `<div class="card hired"><img class="face" src="${portraitURL(RUNNER)}" alt=""><div class="info"><div class="name">LEO</div>` +
+    const cr = curRunner;
+    $('bizTitle').textContent = `${cr.w.name}’S SHOPPING LIST`;
+    h += `<div class="card hired"><img class="face" src="${portraitURL(cr.w)}" alt=""><div class="info"><div class="name">${cr.w.name}</div>` +
       `<div class="job">STORE RUNNER</div><div class="status">ALWAYS READY TO RUN</div></div></div>`;
     h += '<div class="orders">';
     for (const id of ORDER) {
       h += `<div class="biz-row"><span><img src="${iconURL(id)}" alt=""> ${ING_NAMES[id]} <span class="dim">(HAVE ${G.stock[id]})</span></span>` +
-        `<span class="stepper"><button data-act="minus" data-id="${id}">-</button><span>${r.order[id]} PK</span>` +
+        `<span class="stepper"><button data-act="minus" data-id="${id}">-</button><span>${cr.order[id]} PK</span>` +
         `<button data-act="plus" data-id="${id}">+</button></span></div>`;
     }
-    const cost = runnerPacks() * PACK_PRICE;
-    h += `<div class="biz-row"><label><input type="checkbox" data-act="auto" ${r.auto ? 'checked' : ''}> AUTO-RESTOCK</label>` +
-      `<button data-act="send" ${r.state !== 'idle' || r.onBreak || !cost ? 'disabled' : ''}>SEND LEO $${cost}</button></div>`;
+    const cost = runnerPacks(cr) * PACK_PRICE;
+    h += `<div class="biz-row"><label><input type="checkbox" data-act="auto" ${r.auto ? 'checked' : ''}> AUTO-RESTOCK (ALL RUNNERS)</label>` +
+      `<button data-act="send" ${cr.state !== 'idle' || !cost ? 'disabled' : ''}>SEND ${cr.w.name} $${cost}</button></div>`;
     h += `<div class="biz-row"><span class="dim" id="runStatus">${runnerStatus()}</span></div></div>`;
   }
   $('bizBody').innerHTML = h;
@@ -2096,8 +2125,8 @@ function fillFaces() {
 }
 function renderLeoIfOpen() { if (!bizEl.classList.contains('hidden') && bizMode === 'leo') renderBusiness(); }
 function runnerStatus() {
-  const r = G.runner;
-  return 'LEO: ' + (r.msg || (r.state === 'idle' ? 'WAITING FOR ORDERS' : '')).toUpperCase();
+  const r = curRunner;
+  return r.w.name + ': ' + (r.msg || (r.state === 'idle' ? 'WAITING FOR ORDERS' : '')).toUpperCase();
 }
 // keep the timers and Leo's status ticking while a pop-up is open
 function refreshBusinessLive() {
@@ -2127,9 +2156,10 @@ $('bizBody').addEventListener('click', ev => {
   if (act === 'hire') {
     const w = workerById(btn.dataset.w);
     if (w.job === 'runner') {
+      const rn = runnerOf(w.id);
       if (spend(RUNNER_PRICE)) {
-        Object.assign(r, { hired: true, x: RUNNER_HOME, state: 'idle', onBreak: false, shiftT: WORK_TIME });
-        bizMsg('Leo is hired! Click him by your truck to send him shopping.');
+        Object.assign(rn, { hired: true, x: rn.home, state: 'idle', onBreak: false, shiftT: WORK_TIME });
+        bizMsg(`${w.name} is hired! Click him by your truck to send him shopping.`);
       }
     } else if (w.job === 'promoter') {
       if (spend(PROMOTER_PRICE)) {
@@ -2149,14 +2179,14 @@ $('bizBody').addEventListener('click', ev => {
     }
   } else if (act === 'plus' || act === 'minus') {
     const id = btn.dataset.id;
-    r.order[id] = Math.max(0, Math.min(9, r.order[id] + (act === 'plus' ? 1 : -1)));
+    curRunner.order[id] = Math.max(0, Math.min(9, curRunner.order[id] + (act === 'plus' ? 1 : -1)));
   } else if (act === 'send') {
-    const res = sendRunner();
-    if (r.state === 'idle') bizMsg(res); // only speak up when he couldn't go
-    if (r.state !== 'idle') setTimeout(closeBusiness, 700);
+    const res = sendRunner(curRunner);
+    if (curRunner.state === 'idle') bizMsg(res); // only speak up when he couldn't go
+    if (curRunner.state !== 'idle') setTimeout(closeBusiness, 700);
   } else if (act === 'auto') {
     r.auto = btn.checked;
-    bizMsg(r.auto ? 'Leo refills everything before it runs out' : 'Auto-restock off');
+    bizMsg(r.auto ? 'Your runners refill everything before it runs out' : 'Auto-restock off');
   } else return; // clicks on the truck picker etc.
   saveBusiness();
   renderBusiness();
