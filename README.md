@@ -8,7 +8,7 @@ An 8-bit night-time taco truck game that runs in the browser. You're the bearded
 - Click the ingredients to build the taco (click again to take one off), then hit **SERVE**.
 - Every taco you serve uses up 1 of each ingredient in it. The number on each button is how many you have left.
 - Faster service earns bigger tips. If a customer gives up waiting, they walk off and it costs you $5.
-- Pause any time with the button in the top-left corner (or **P** / **Esc**).
+- Pause any time with the button in the top-left corner (or **P** / **Esc**). The pause menu has **NEW GAME**, which saves the game you are playing and starts a fresh one, and a list of your saved games to **LOAD** any of them back (the one you were playing gets saved first).
 
 ### The market
 

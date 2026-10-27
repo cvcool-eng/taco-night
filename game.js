@@ -1919,11 +1919,72 @@ function setPaused(p) {
   G.paused = p;
   $('pause').classList.toggle('paused', p);
   $('pause').setAttribute('aria-label', p ? 'Resume' : 'Pause');
-  if (p) {
-    screen.innerHTML = '<h1>PAUSED</h1><div class="panel"><button id="resume">RESUME</button></div>';
-    $('resume').addEventListener('click', () => setPaused(false));
-  }
+  if (p) renderPauseMenu();
   screen.classList.toggle('hidden', !p);
+}
+function renderPauseMenu() {
+  const saves = readSaves();
+  let h = '<h1>PAUSED</h1><div class="panel wide"><div class="btnrow"><button id="resume">RESUME</button>' +
+    '<button id="newGame" class="ghost">NEW GAME</button></div>' +
+    `<p class="dim">PLAYING: ${gameName()} · $${G.money}</p>`;
+  if (saves.length) {
+    h += '<h3 class="sub">SAVED GAMES</h3><div class="orders">';
+    for (const s of saves) {
+      h += `<div class="biz-row"><span>${s.name} <span class="dim">· $${s.money} · ${s.trucks} TRUCK${s.trucks > 1 ? 'S' : ''} · ${s.workers} WORKERS</span></span>` +
+        `<span class="stepper"><button data-load="${s.id}">LOAD</button><button data-del="${s.id}" class="ghost">X</button></span></div>`;
+    }
+    h += '</div>';
+  }
+  screen.innerHTML = h + '</div>';
+  $('resume').addEventListener('click', () => setPaused(false));
+  $('newGame').addEventListener('click', newGame);
+  screen.querySelectorAll('[data-load]').forEach(b => b.addEventListener('click', () => loadSave(b.dataset.load)));
+  screen.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    const s = readSaves().find(x => x.id === b.dataset.del);
+    if (s && confirm(`Delete ${s.name} for good?`)) { writeSaves(readSaves().filter(x => x.id !== s.id)); renderPauseMenu(); }
+  }));
+}
+
+// ---- saved games ----
+// The game you're playing lives in the usual save keys. NEW GAME tucks it into
+// the saved-games list and starts fresh; LOAD swaps a saved game back in (and
+// tucks the current one away), so no progress is ever thrown out.
+const SAVES_KEY = 'tacoNight.saves', NAME_KEY = 'tacoNight.name';
+const ACTIVE_KEYS = [SAVE_KEY, STOCK_KEY, BIZ_KEY];
+function readSaves() { try { return JSON.parse(localStorage.getItem(SAVES_KEY) || '[]'); } catch (err) { return []; } }
+function writeSaves(list) { try { localStorage.setItem(SAVES_KEY, JSON.stringify(list)); } catch (err) { /* storage full or blocked */ } }
+function gameName() { try { return localStorage.getItem(NAME_KEY) || 'GAME 1'; } catch (err) { return 'GAME 1'; } }
+function nextGameName() {
+  const nums = [gameName(), ...readSaves().map(s => s.name)].map(n => parseInt(n.replace(/\D+/g, ''), 10) || 1);
+  return `GAME ${Math.max(...nums) + 1}`;
+}
+function snapshotCurrent() {
+  saveGame(); saveBusiness();
+  const data = {};
+  for (const k of ACTIVE_KEYS) { const v = localStorage.getItem(k); if (v !== null) data[k] = v; }
+  const workers = WORKERS.filter(w => w.job === 'cook' ? G.staff[w.id].truck !== null : w.job === 'promoter' ? G.promo[w.id].hired : runnerOf(w.id).hired).length;
+  return { id: String(Date.now()), name: gameName(), money: G.money, trucks: G.trucks.length, workers, data };
+}
+function switchTo(name, data) {
+  for (const k of ACTIVE_KEYS) localStorage.removeItem(k);
+  for (const k in data) localStorage.setItem(k, data[k]);
+  localStorage.setItem(NAME_KEY, name);
+  location.reload(); // simplest way to rebuild every truck, worker and timer from the save
+}
+function newGame() {
+  try {
+    const name = nextGameName();
+    writeSaves([snapshotCurrent(), ...readSaves()]);
+    switchTo(name, {});
+  } catch (err) { flashHint('COULD NOT SAVE: STORAGE IS FULL OR BLOCKED'); }
+}
+function loadSave(id) {
+  try {
+    const saves = readSaves(), s = saves.find(x => x.id === id);
+    if (!s) return;
+    writeSaves([snapshotCurrent(), ...saves.filter(x => x.id !== id)]);
+    switchTo(s.name, s.data);
+  } catch (err) { flashHint('COULD NOT LOAD THAT GAME'); }
 }
 $('pause').addEventListener('click', () => { setPaused(!G.paused); $('pause').blur(); });
 
