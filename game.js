@@ -401,7 +401,14 @@ for (let i = 0; i < 6; i++) moths.push({ b: (rand() * 30) | 0, a: rand() * 6.28,
 
 let parts = []; // generic particles
 
-function addPart(o) { parts.push(Object.assign({ life: 1, max: 1, vx: 0, vy: 0, g: 0, size: 1 }, o)); }
+// effects from sales nobody can see (other trucks off-screen) are skipped, and
+// there's a ceiling so a huge business can't drown the screen in sparkles
+const OFFSCREEN_SKIP = new Set(['coin', 'heart', 'text', 'icon', 'note', 'ember', 'puff']);
+function addPart(o) {
+  if (OFFSCREEN_SKIP.has(o.type) && (o.x < camX - 60 || o.x > camX + W + 60)) return;
+  if (parts.length > 1500) parts.shift();
+  parts.push(Object.assign({ life: 1, max: 1, vx: 0, vy: 0, g: 0, size: 1 }, o));
+}
 
 // ---------------------------------------------------------------------
 //  game state
@@ -481,7 +488,8 @@ function extraWorkers(count) {
   const out = [];
   for (let k = 0; k < count; k++) {
     const girl = k % 2 === 1, pool = girl ? GIRLS : BOYS, j = k >> 1;
-    out.push({ name: `${pool[j % pool.length]} ${LETTERS[Math.floor(j / pool.length) % LETTERS.length]}.`, girl });
+    const m = Math.floor(j / pool.length); // last initial, then two letters once the alphabet runs out
+    out.push({ name: `${pool[j % pool.length]} ${m < LETTERS.length ? LETTERS[m] : LETTERS[m % LETTERS.length] + LETTERS[Math.floor(m / LETTERS.length)]}.`, girl });
   }
   return out;
 }
@@ -505,8 +513,8 @@ const WORKERS = [
   ...[['CHUY', 0], ['LOLA', 1], ['PEPE', 0], ['NINA', 1], ['BETO', 0], ['PACA', 1], ['TITO', 0], ['YOLI', 1], ['MEMO', 0], ['KIKA', 1],
     ['PACO', 0], ['LUPE', 1], ['CHEPE', 0], ['MAYA', 1], ['TONO', 0], ['BELA', 1], ['NACHO', 0], ['FRIDA', 1], ['LALO', 0], ['GABY', 1]]
     .map(([name, girl], i) => mixedWorker(name, girl, 'promoter', i + 3)),
-  // and 200 more of each, named like "ALEX R." so nobody shares a name
-  ...extraWorkers(400).map((n, i) => mixedWorker(n.name, n.girl, i < 200 ? 'cook' : 'promoter', i + 70)),
+  // and 1700 more of each, named like "ALEX R." (or "ALEX RB.") so nobody shares a name
+  ...extraWorkers(3400).map((n, i) => mixedWorker(n.name, n.girl, i < 200 || (i >= 400 && i < 900) || (i >= 1400 && i < 2400) ? 'cook' : 'promoter', i + 70)),
   { id: 'leo', name: 'LEO', job: 'runner', girl: false, hair: '#5a3a1a', skin: '#e0a77a', cap: '#ff8a20', apron: '#ff8a20' },
   // more Leos: extra store runners, all in Leo's orange cap
   ...Array.from({ length: 9 }, (_, i) => ({ ...mixedWorker(`LEO ${i + 2}`, false, 'runner', i * 4 + 1), cap: '#ff8a20', apron: '#ff8a20' })),
@@ -516,7 +524,8 @@ const PROMOTERS = WORKERS.filter(w => w.job === 'promoter');
 const RUNNERS = WORKERS.filter(w => w.job === 'runner');
 const RUNNER = RUNNERS[0]; // Leo himself
 const JOB_NAMES = { cook: 'TRUCK COOK', runner: 'STORE RUNNER', promoter: 'PROMOTER' };
-const workerById = id => WORKERS.find(w => w.id === id) || null;
+const WORKER_MAP = new Map(WORKERS.map(w => [w.id, w]));
+const workerById = id => WORKER_MAP.get(id) || null;
 
 function makeChef() { return { pose: 'idle', poseT: 0, idle: 'stand', idleT: rr(1, 4), look: 0, lookT: 2, blinkT: rr(1, 4) }; }
 function makeTruck(i) { return { i, off: TRUCK_SPOTS[i], chef: i === 0 ? chef : makeChef(), spawnT: rr(1.5, 5) }; }
@@ -528,9 +537,18 @@ G.staff = Object.fromEntries(COOKS.map(w => [w.id, {
   id: w.id, w, truck: null, onBreak: false, shiftT: WORK_TIME, cooking: null, noStock: false,
   chef: makeChef(), x: 146, goal: 146, dir: 1, waitT: rr(1, 3),
 }]));
-const staffAt = i => COOKS.map(w => G.staff[w.id]).filter(s => s.truck === i);
+// the cooks at each truck, rebuilt only when someone is hired or moved (and once a frame)
+let staffCache = null;
+function staffAt(i) {
+  if (!staffCache) {
+    staffCache = {};
+    for (const w of COOKS) { const s = G.staff[w.id]; if (s.truck !== null) (staffCache[s.truck] ||= []).push(s); }
+  }
+  return staffCache[i] || [];
+}
 const truckOf = id => { const s = G.staff[id]; return s && s.truck !== null ? G.trucks[s.truck] : null; };
 function hireCook(id, truck) {
+  staffCache = null;
   Object.assign(G.staff[id], { truck, onBreak: false, shiftT: WORK_TIME, cooking: null, x: 146, goal: 146 });
 }
 
@@ -796,6 +814,7 @@ function customerLeftAngry(c) {
 // ---------------------------------------------------------------------
 let cricketT = 2;
 function update(dt) {
+  staffCache = null;
   if (G.paused || G.menu) return; // everything freezes while paused or in a menu
   G.time += dt;
   const t = G.time;
@@ -818,7 +837,7 @@ function update(dt) {
         tr.spawnT = Math.max(5.5, 10.5 - G.served * 0.25) / crowdBoost() * rr(0.85, 1.15);
       }
     });
-    const lines = G.trucks.map(tr => queue(tr.i));
+    const lines = G.lines = G.trucks.map(tr => queue(tr.i));
     lines.forEach((q, i) => q.forEach((c, k) => { c.target = G.trucks[i].off + slotX(k); c.hidden = k >= SHOWN_LINE; }));
     for (const c of G.customers) {
       c.shake = Math.max(0, c.shake - dt);
@@ -911,7 +930,7 @@ function animChef(st, dt, tr) {
   }
   st.blinkT -= dt;
   if (st.blinkT < -0.12) st.blinkT = rr(2, 5);
-  if (st.idle === 'whistle' && st.pose === 'idle' && rand() < dt * 1.5)
+  if (st.idle === 'whistle' && st.pose === 'idle' && onScreen(tr.off + 152) && rand() < dt * 1.5 / Math.max(1, staffAt(tr.i).length))
     addPart({ type: 'note', x: tr.off + 152, y: 80, vx: rr(4, 10), vy: -10, life: 1.4, max: 1.4 });
 }
 
@@ -952,7 +971,7 @@ function updateCooks(dt) {
     s.noStock = false;
     if (s.onBreak) continue;
     // take the first waiting customer nobody is already cooking for
-    const c = queue(s.truck).find(c => c.state === 'wait' && !c.claimed && c.patience < c.maxPatience - 0.5);
+    const c = ((G.lines && G.lines[s.truck]) || queue(s.truck)).find(c => c.state === 'wait' && !c.claimed && c.patience < c.maxPatience - 0.5);
     if (!c) continue;
     if (c.order.every(id => G.stock[id] > 0)) {
       for (const id of c.order) G.stock[id]--;
@@ -994,7 +1013,8 @@ function updateOneRunner(r, dt) {
   // auto-restock: before anything can run out, an idle runner goes and fills every
   // item back up (one auto run at a time, so they don't all buy the same thing)
   if (r.cooldown > 0) r.cooldown -= dt;
-  const autoBusy = G.runners.some(o => o.autoTrip && (o.state === 'toStore' || o.state === 'shopping'));
+  // one auto run at a time, unless something has already run out: then every free runner helps
+  const autoBusy = G.runners.some(o => o.autoTrip && (o.state === 'toStore' || o.state === 'shopping')) && !ORDER.some(id => G.stock[id] <= 0);
   if (r.state === 'idle' && G.runner.auto && !autoBusy && !(r.cooldown > 0) && ORDER.some(id => G.stock[id] < autoLow(id))) {
     r.state = 'toStore'; r.autoTrip = true; r.msg = 'Running low! Restocking everything';
   }
@@ -1009,7 +1029,10 @@ function updateOneRunner(r, dt) {
       if (r.autoTrip) {
         // enough packs to get every item above AUTO_TARGET, bought one pack at a time
         // round the list (empty items first) so a short wallet is shared out fairly
-        const need = Object.fromEntries(ORDER.map(id => [id, Math.max(0, Math.ceil((Math.max(AUTO_TARGET, autoLow(id) * 2) + 1 - G.stock[id]) / PACK_SIZE))]));
+        // plus one of each item for everybody already waiting in line
+        const backlog = Object.fromEntries(ORDER.map(id => [id, 0]));
+        for (const c of G.customers) if (c.state !== 'leave' && !c.claimed) for (const id of c.order) backlog[id]++;
+        const need = Object.fromEntries(ORDER.map(id => [id, Math.max(0, Math.ceil((Math.max(AUTO_TARGET, autoLow(id) * 2) + backlog[id] + 1 - G.stock[id]) / PACK_SIZE))]));
         const turn = ORDER.slice().sort((a, b) => G.stock[a] - G.stock[b]);
         while (G.money >= PACK_PRICE && turn.some(id => need[id] > 0)) {
           for (const id of turn) {
@@ -1530,7 +1553,7 @@ function renderStreet(t) {
     R(b, p.x, p.y, 2, 1, '#e8e4dc'); P(b, p.x + 1, p.y - 1, '#e8e4dc');
   }
   b.globalAlpha = 1;
-  for (const tr of G.trucks) drawTruckFront(tr, t);
+  for (const tr of G.trucks) if (onScreen(tr.off + 60) || onScreen(tr.off + 270)) drawTruckFront(tr, t);
 
   // string-light wires, flags and bulbs
   STRINGS.forEach((s, si) => {
@@ -1560,13 +1583,17 @@ function renderStreet(t) {
 
   // the runners (inside the market while shopping)
   for (const rn of G.runners) {
-    if (!rn.hired || rn.state === 'shopping') continue;
+    if (!rn.hired || rn.state === 'shopping' || !onScreen(rn.x)) continue;
     const moving = rn.state === 'toStore' || rn.state === 'back';
     drawCustomer(b, Object.assign({}, rn, { state: moving ? 'walk' : 'idle' }), t);
     if (rn.carrying) { const bx = Math.round(rn.x) + (rn.dir < 0 ? -11 : 7); R(b, bx, FEET - 16, 5, 6, '#c8a878'); R(b, bx, FEET - 16, 5, 1, '#e0c898'); }
   }
   for (const p of visiblePromoters()) drawPromoter(b, p, t);
-  for (const c of G.customers) if (!c.hidden && onScreen(c.x)) drawCustomer(b, c, t);
+  // everyone in line on screen, plus as many people walking off as still fit (a busy
+  // business sends hundreds a second, far more than the street can show)
+  const shown = G.customers.filter(c => !c.hidden && c.state !== 'leave' && onScreen(c.x));
+  for (const c of G.customers) if (shown.length < 14 && c.state === 'leave' && !c.hidden && onScreen(c.x)) shown.push(c);
+  for (const c of shown) drawCustomer(b, c, t);
 
   // flying taco (base, so it gets lit)
   if (G.flying) {
@@ -1627,7 +1654,10 @@ function renderStreet(t) {
   // people block the glow of lit windows behind them (the emit layer is drawn on top)
   e.save();
   e.globalCompositeOperation = 'destination-out';
-  for (const c of G.customers) if (!c.hidden && onScreen(c.x)) drawCustomer(e, c, t);
+  // a body-sized box per person is enough to hide the glow behind them, and much
+  // cheaper than drawing everyone a second time
+  const bodyBox = x => R(e, Math.round(x) - 5, FEET - 30, 11, 31, '#000');
+  for (const c of shown) if (c.state !== 'leave') bodyBox(c.x); // only the line blocks the truck's glow
   // ...and cooks block the grill flames, embers and hood light behind them
   for (const tr of G.trucks) {
     if (!onScreen(tr.off + 146)) continue;
@@ -1640,9 +1670,9 @@ function renderStreet(t) {
       e.restore();
     }
   }
-  for (const p of visiblePromoters()) drawPromoter(e, p, t);
+  for (const p of visiblePromoters()) bodyBox(p.x);
   for (const rn of G.runners)
-    if (rn.hired && rn.state !== 'shopping') drawCustomer(e, Object.assign({}, rn, { state: rn.state === 'toStore' || rn.state === 'back' ? 'walk' : 'idle' }), t);
+    if (rn.hired && rn.state !== 'shopping' && onScreen(rn.x)) bodyBox(rn.x);
   e.restore();
 
   // ---------- UI layer: order bubbles, cook status, market hover
@@ -2032,9 +2062,9 @@ $('shopClose').addEventListener('click', closeShop);
 
 // ---- managing the business: one pop-up with three faces ----
 //  'workers' (click a truck), 'lot' (click the FOR SALE sign), 'leo' (click Leo)
-let bizMode = 'workers', bizTab = 'truck', bizTruck = 0; // bizTruck: the truck you clicked to open the workers list
+let bizMode = 'workers', bizTab = 'truck', bizShow = 50, bizTruck = 0; // bizTruck: the truck you clicked to open the workers list
 function openBusiness(mode) {
-  bizMode = mode;
+  bizMode = mode; bizShow = 50;
   G.menu = true; // the game waits while you manage things
   $('bizMsg').textContent = '';
   renderBusiness();
@@ -2078,12 +2108,15 @@ function renderBusiness() {
         `<span class="assigned">ASSIGNED:</span>${assigned}`, 'hired');
     }
     if (free.length) {
-      h += '<h3 class="sub">HIRE MORE</h3>';
-      for (const w of free) {
+      // runners first, then 50 at a time so a list of thousands stays quick
+      const toHire = free.filter(w => w.job === 'runner').concat(free.filter(w => w.job !== 'runner'));
+      h += `<h3 class="sub">HIRE MORE (${free.length} AVAILABLE)</h3>`;
+      for (const w of toHire.slice(0, bizShow)) {
         const price = { runner: RUNNER_PRICE, promoter: PROMOTER_PRICE, cook: COOK_PRICE }[w.job];
         h += card(w, { runner: 'RUNS TO THE MARKET FOR YOU', promoter: 'BRINGS MORE CUSTOMERS TO YOUR TRUCKS', cook: 'COOKS AND SERVES ON THEIR OWN' }[w.job],
           `<button data-act="hire" data-w="${w.id}">HIRE $${price}</button>`);
       }
+      if (toHire.length > bizShow) h += `<div class="btnrow"><button data-act="more">SHOW 50 MORE</button></div>`;
     }
   } else if (bizMode === 'lot') {
     $('bizTitle').textContent = 'NEW TRUCK';
@@ -2117,7 +2150,7 @@ function fillFaces() {
   if (fillFaces.busy) return;
   fillFaces.busy = true;
   const step = () => {
-    const imgs = [...document.querySelectorAll('#bizBody img[data-face]')].slice(0, 12);
+    const imgs = [...document.querySelectorAll('#bizBody img[data-face]')].slice(0, 30);
     for (const img of imgs) { img.src = portraitURL(workerById(img.dataset.face)); img.removeAttribute('data-face'); }
     if (imgs.length) requestAnimationFrame(step); else fillFaces.busy = false;
   };
@@ -2148,8 +2181,9 @@ $('bizBody').addEventListener('click', ev => {
   const btn = ev.target.closest('[data-act]');
   if (!btn || btn.disabled) return;
   const act = btn.dataset.act, r = G.runner;
+  if (act === 'more') { const p = bizEl.querySelector('.panel'), y = p.scrollTop; bizShow += 50; renderBusiness(); p.scrollTop = y; return; }
   if (act === 'tab') {
-    bizTab = btn.dataset.tab; $('bizMsg').textContent = '';
+    bizTab = btn.dataset.tab; bizShow = 50; $('bizMsg').textContent = '';
     renderBusiness(); $('bizBody').scrollTop = 0; bizEl.querySelector('.panel').scrollTop = 0;
     return;
   }
@@ -2197,7 +2231,7 @@ $('bizBody').addEventListener('change', ev => {
   if (!sel) return;
   const s = G.staff[sel.dataset.assign];
   if (s.cooking) { s.cooking.c.claimed = null; s.cooking = null; }
-  s.truck = +sel.value; s.x = s.goal = 146;
+  s.truck = +sel.value; s.x = s.goal = 146; staffCache = null;
   bizMsg(`${s.w.name} now works at ${truckName(s.truck).toLowerCase()}`);
   saveBusiness();
   renderBusiness();
