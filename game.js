@@ -821,7 +821,7 @@ function update(dt) {
         if (c.patience <= 0) customerLeftAngry(c);
       }
     }
-    G.customers = G.customers.filter(c => c.x < WORLD_W + 20);
+    G.customers = G.customers.filter(c => c.state !== 'leave' || c.x < WORLD_W + 40); // only drop people who walked off (truck 4's arrive from past the edge)
     updateCooks(dt);
     updateRunner(dt);
     updatePromoters(dt);
